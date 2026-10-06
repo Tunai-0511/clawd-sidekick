@@ -560,7 +560,8 @@ export const register: Register = (on, options) => {
       game,
       time: timeOfDay(now, offset),
       board: open.slice(0, 6).map(t => t.text),
-      deadline: nearest === undefined ? '' : `${nearest.title} · ${formatDue(nearest.due, offset)} · ${countdown(nearest.due, now, talk)}`,
+      // To the hour only: a minute's change would redraw the desktop house and start its loops over.
+      deadline: nearest === undefined ? '' : `${nearest.title} · ${formatDue(nearest.due, offset)} · ${countdown(nearest.due, now, talk, true)}`,
       lang: talk,
       theme,
       season: seasonPick !== 'auto' ? seasonPick : seasonOf(now, offset, zone),

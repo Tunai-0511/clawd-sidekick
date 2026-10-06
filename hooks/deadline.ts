@@ -67,8 +67,11 @@ export function urgency(due: number, now: number): Urgency {
   return 'far'
 }
 
-/** "剩 5 天" / "5 days left", "剩 6 小時 20 分" / "6 h 20 min left", "過了 2 天" / "2 days ago". */
-export function countdown(due: number, now: number, lang: Lang): string {
+/**
+ * "剩 5 天" / "5 days left", "剩 6 小時 20 分" / "6 h 20 min left", "過了 2 天" / "2 days ago".
+ * `isRough` stops at the hour ("剩 6 小時"), for text that should not change every minute.
+ */
+export function countdown(due: number, now: number, lang: Lang, isRough = false): string {
   const words = say(lang)
   const left = due - now
   const abs = Math.abs(left)
@@ -78,6 +81,7 @@ export function countdown(due: number, now: number, lang: Lang): string {
   if (left < 0) return days > 0 ? words.ago.days(days) : words.ago.hours(hours)
   if (days >= 2) return words.left.days(days)
   if (days === 1) return words.left.dayHours(hours)
+  if (isRough) return hours >= 1 ? words.left.hours(hours) : words.left.underHour
   if (hours >= 1) return words.left.hoursMinutes(hours, minutes)
   return words.left.minutes(minutes)
 }

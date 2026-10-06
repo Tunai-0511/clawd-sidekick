@@ -122,7 +122,14 @@ export type Strings = {
   // Deadlines
   usage: string
   badDate: string
-  left: { days: (d: number) => string; dayHours: (h: number) => string; hoursMinutes: (h: number, m: number) => string; minutes: (m: number) => string }
+  left: {
+    days: (d: number) => string
+    dayHours: (h: number) => string
+    hoursMinutes: (h: number, m: number) => string
+    minutes: (m: number) => string
+    hours: (h: number) => string
+    underHour: string
+  }
   ago: { days: (d: number) => string; hours: (h: number) => string }
   // The scenes
   themes: Record<Theme, string>
@@ -245,6 +252,8 @@ const zh: Strings = {
     dayHours: h => `剩 1 天 ${h} 小時`,
     hoursMinutes: (h, m) => `剩 ${h} 小時 ${m} 分`,
     minutes: m => `剩 ${m} 分`,
+    hours: h => `剩 ${h} 小時`,
+    underHour: '剩不到 1 小時',
   },
   ago: { days: d => `過了 ${d} 天`, hours: h => `過了 ${h} 小時` },
   themes: { house: '小屋', beach: '海灘', space: '太空站', forest: '森林營地' },
@@ -404,6 +413,8 @@ const en: Strings = {
     dayHours: h => `1 day ${h} h left`,
     hoursMinutes: (h, m) => `${h} h ${m} min left`,
     minutes: m => `${m} min left`,
+    hours: h => `${h} h left`,
+    underHour: 'under an hour left',
   },
   ago: { days: d => (d === 1 ? '1 day ago' : `${d} days ago`), hours: h => `${h} h ago` },
   themes: { house: 'House', beach: 'Beach', space: 'Space station', forest: 'Forest camp' },

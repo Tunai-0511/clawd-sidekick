@@ -165,6 +165,16 @@ describe('the season and the holidays', () => {
 })
 
 describe('the band above the prompt', () => {
+  test('reduced motion holds every loop on its first frame, and a holiday hat clears the bubble', async () => {
+    const svg = sceneSvg({ ...sceneOf('volley', 'night', 'zh', 'house', 'winter'), holiday: 'christmas' }, NOW)
+    expect(svg).toContain('@media (prefers-reduced-motion:reduce)')
+    const loops = svg.split('<animate attributeName="visibility"').length - 1
+    expect(loops).toBeGreaterThan(0)
+    expect(svg.split('<g class="f0" visibility').length - 1 + svg.split('<g class="f" visibility').length - 1).toBe(loops)
+    const bubbleTop = (text: string): number => Number(text.match(/<g class="quiet"><rect x="[\d.]+" y="([\d.]+)"/)?.[1])
+    expect(bubbleTop(svg)).toBeLessThan(bubbleTop(sceneSvg(sceneOf('volley', 'night', 'zh', 'house', 'winter'), NOW)) - 3)
+  })
+
   test('the house draws as a Client on the terminal and an interactive SVG on the desktop', async ($, on) => {
     world(on)
     await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
@@ -187,6 +197,26 @@ describe('the band above the prompt', () => {
         expect(String(svg?.props.source)).toContain('遊戲間')
       }
       await ui.unmount()
+    }
+  })
+
+  test('between ticks the desktop house keeps the same SVG, so its loops never start over', async ($, on) => {
+    const w = world(on)
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    const run = (command: string, args: string) => $.command.run({ command, args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    // Five hours from now, written in Taipei time: a countdown that would tick every minute.
+    await run('deadline', `add ${new Date(NOW + 13 * 3_600_000).toISOString().slice(0, 16).replace('T', ' ')} Demo`)
+    await $.turn.start({ text: '幫我修 bug', turnId: 't0' })
+    // Past the walk to the court and the deadline's one alarm.
+    await w.clock.advance(60_000)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const source = async (): Promise<string> => String((await ui.find({ type: 'Svg' }))?.props.source)
+    const first = await source()
+    expect(first).toContain('Demo')
+    expect(first).toContain('在打排球')
+    for (let i = 0; i < 12; i++) {
+      await w.clock.advance(5_000)
+      expect(await source()).toBe(first)
     }
   })
 

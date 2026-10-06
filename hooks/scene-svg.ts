@@ -4,7 +4,8 @@
 // with SMIL and then switches to what he does there. Hovering is CSS alone:
 // a Clawd hams it up, the lamp lights, the arcade says hi, and every room,
 // Clawd, the board and the calendar carry a tooltip. `color-scheme` on the
-// root keeps the surface's frame transparent.
+// root keeps the surface's frame transparent. When the system asks for
+// reduced motion, every loop holds its first frame and nothing drifts.
 
 import { decorate, decorParts, fallingSvg } from './decor'
 import { say } from './i18n'
@@ -89,15 +90,15 @@ function layered(frames: readonly Grid[], box: Box): string {
   return paths(first, box, isShared) + flipbook(frames.map(g => paths(g, box, i => !isShared(i))))
 }
 
-/** Frames as groups that take turns, each shown for one tick. */
+/** Frames as groups that take turns, each shown for one tick; the first is `f0`, the one that stays when motion is reduced. */
 function flipbook(frames: readonly string[]): string {
   const unique = [...new Set(frames)]
   if (unique.length === 1) return `<g>${unique[0]}</g>`
   const dur = ((frames.length * STEP) / 1000).toFixed(3)
   return unique
-    .map(markup => {
+    .map((markup, k) => {
       const values = frames.map(f => (f === markup ? 'visible' : 'hidden')).join(';')
-      return `<g visibility="hidden"><animate attributeName="visibility" values="${values}" dur="${dur}s" calcMode="discrete" repeatCount="indefinite"/>${markup}</g>`
+      return `<g class="f${k === 0 ? '0' : ''}" visibility="hidden"><animate attributeName="visibility" values="${values}" dur="${dur}s" calcMode="discrete" repeatCount="indefinite"/>${markup}</g>`
     })
     .join('')
 }
@@ -149,7 +150,7 @@ function clouds(s: SceneProps): string {
   if (s.theme === 'house') {
     return (
       '<clipPath id="glass"><rect x="141" y="6" width="12" height="4"/><rect x="154" y="6" width="13" height="4"/><rect x="141" y="11" width="12" height="4"/><rect x="154" y="11" width="13" height="4"/></clipPath>' +
-      `<g clip-path="url(#glass)" fill="${fill}">` +
+      `<g class="drift" clip-path="url(#glass)" fill="${fill}">` +
       '<g><animateTransform attributeName="transform" type="translate" from="-12 0" to="30 0" dur="17s" repeatCount="indefinite"/><path d="M141 8h6v1h-6zM142 7h3v1h-3z"/></g>' +
       '<g><animateTransform attributeName="transform" type="translate" from="-20 0" to="30 0" dur="23s" begin="-9s" repeatCount="indefinite"/><path d="M146 12h5v1h-5zM147 11h2v1h-2z"/></g>' +
       '</g>'
@@ -157,7 +158,7 @@ function clouds(s: SceneProps): string {
   }
   const rows = sky.h > 13 ? [4, 7, 10] : [3, 6]
   return (
-    `<clipPath id="sky"><rect x="${sky.x}" y="${sky.y}" width="${sky.w}" height="${sky.h}"/></clipPath><g clip-path="url(#sky)" fill="${fill}">` +
+    `<clipPath id="sky"><rect x="${sky.x}" y="${sky.y}" width="${sky.w}" height="${sky.h}"/></clipPath><g class="drift" clip-path="url(#sky)" fill="${fill}">` +
     rows
       .map(
         (y, i) =>
@@ -180,14 +181,17 @@ const escape = (text: string): string =>
 
 const FONT = "font-family=\"'PingFang TC','Noto Sans TC','Microsoft JhengHei',system-ui,sans-serif\""
 
-function bubble(label: string, isMain: boolean): string {
+/** How far a holiday hat rises above the head, for the bubble to clear it. */
+const HAT_RISE = { santa: 4, witch: 5 } as const
+
+function bubble(label: string, isMain: boolean, hat?: keyof typeof HAT_RISE): string {
   if (label === '') return ''
   const size = isMain ? 2.4 : 1.9
   const width = textWidth(label, size) + 1.6
   const height = size + 1.2
   const cx = REF + 8
   const x = Math.max(cx - width / 2, REF - 12)
-  const y = 13.2 - height - (isMain ? 0 : 1.2)
+  const y = 13.2 - height - (isMain ? 0 : 1.2) - (hat === undefined ? 0 : HAT_RISE[hat])
   return (
     `<g class="quiet"><rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${width.toFixed(2)}" height="${height.toFixed(2)}" rx="0.8" fill="#FFFFFF" fill-opacity="0.94" stroke="#2A1A15" stroke-width="0.18"/>` +
     `<path d="M${cx - 0.8} ${(y + height).toFixed(2)}l0.8 1l0.8 -1z" fill="#FFFFFF"/>` +
@@ -218,7 +222,7 @@ function actor(a: SceneActor, index: number, s: SceneProps, now: number, play: P
     return layered(out, box)
   }
   const x = actorX(a, now)
-  const label = bubble(a.label, a.cap === null)
+  const label = bubble(a.label, a.cap === null, outfitOf(a, s).hat)
   const stay = `<g class="act">${frames(a.doing, LOOP, true)}</g>${PET}`
   const title = `<title>${escape(actorTip(a, s.lang))}</title>`
   if (x === a.toX) return `<g class="clawd" transform="translate(${a.toX - REF} 0)">${title}${stay}${label}</g>`
@@ -265,9 +269,18 @@ function hovers(s: SceneProps): string {
   )
 }
 
+/**
+ * Reduced motion: the first frame of every loop stays (`!important` outranks
+ * SMIL's own visibility), the other frames, the clouds and the falling leaves
+ * go, and a hovered Clawd stops hopping.
+ */
+const STILL =
+  '@media (prefers-reduced-motion:reduce){.f,.drift{display:none}.f0{visibility:visible!important}.clawd:hover .act,.clawd:hover .pet{animation:none}}'
+
 const STYLE =
   '<style>' +
   ':root{color-scheme:light dark;background:transparent}' +
+  STILL +
   '.art,.quiet{pointer-events:none}' +
   '.glass{fill:#FFFFFF;fill-opacity:0}' +
   '.room:hover .glass{fill-opacity:0.07}' +
@@ -307,6 +320,6 @@ export function miniClawdSvg(doing: Doing): string {
   }
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${box.x} ${box.y} ${box.w} ${box.h}" width="100%" height="100%" shape-rendering="crispEdges">` +
-    `<style>:root{color-scheme:light dark;background:transparent}</style>${layered(frames, box)}</svg>`
+    `<style>:root{color-scheme:light dark;background:transparent}${STILL}</style>${layered(frames, box)}</svg>`
   )
 }

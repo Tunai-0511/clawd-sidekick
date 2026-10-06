@@ -119,7 +119,7 @@ export function fallingSvg(s: SceneProps): string {
   }
   const tile = byColor.map((d, i) => `<path fill="${colors[i]}" d="${d}"/>`).join('')
   return (
-    `${clip}<g class="quiet" clip-path="url(#falling)"><g>` +
+    `${clip}<g class="quiet drift" clip-path="url(#falling)"><g>` +
     `<animateTransform attributeName="transform" type="translate" from="0 0" to="0 ${SH}" dur="9s" repeatCount="indefinite"/>` +
     `<g><animateTransform attributeName="transform" type="translate" values="0 0;3 0;0 0" dur="4s" repeatCount="indefinite"/>${tile}</g>` +
     '</g></g>'

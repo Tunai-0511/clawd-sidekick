@@ -41,7 +41,11 @@
 - **Seasons**, from your local date: blossoms and drifting petals in spring, a red-and-gold forest and falling leaves in autumn, scarves on every Clawd in winter. South of the equator the seasons turn over: your system time zone (`Australia/Sydney`, `America/Sao_Paulo`) tells Clawd which side you're on.
 - **Holidays**: lanterns for Lunar New Year, pumpkins and a witch's hat for Halloween, a tree and a Santa hat for Christmas.
 
+![Spring blossoms in the forest camp, its autumn reds and golds, Halloween pumpkins on the beach at dusk, Christmas night in the house with scarves and a Santa hat](./docs/seasons.png)
+
 **Hover everything.** In the Desktop app, a Clawd under the pointer hops and shows hearts, and his tooltip says what he's doing. The board lists your to-dos and the calendar names the deadline. Each scene's light switches on, and its toy says hi: the arcade, a crab peeking out of the sandcastle, or sparks from the campfire. In the terminal, the line under the house tells you what's under the pointer, and a click pets that Clawd.
+
+With reduced motion turned on in your system settings, the Desktop scene holds still: no loops, no drifting clouds or leaves.
 
 **A Clawd spinner.** The `Thinking…` line becomes a small Clawd who thinks in dots or taps his feet while a tool runs, beside a clock that counts every second.
 
@@ -110,7 +114,7 @@ A mod runs with your permissions, so here is everything this one reaches (`claud
 ## How it works
 
 - `hooks/themes.ts` draws the four scenes procedurally on a 256 × 28 canvas (`hooks/pixels.ts`). `hooks/scene.ts` adds the Clawds, the crew's places in each game, and what the pointer finds.
-- **Desktop app**: `hooks/scene-svg.ts` turns it into one interactive SVG in three layers. The still scene is drawn once. Each of the scene's moving parts loops as a SMIL flipbook of only the pixels that change, and the game being played is a layer of its own, so their periods never multiply. Walking is `animateTransform`, and hovering is CSS `:hover` and `<title>`. `color-scheme: light dark` on the root keeps the frame transparent on any theme.
+- **Desktop app**: `hooks/scene-svg.ts` turns it into one interactive SVG in three layers. The still scene is drawn once. Each of the scene's moving parts loops as a SMIL flipbook of only the pixels that change, and the game being played is a layer of its own, so their periods never multiply. Walking is `animateTransform`, and hovering is CSS `:hover` and `<title>`. `color-scheme: light dark` on the root keeps the frame transparent on any theme. When the system asks for reduced motion, every loop holds its first frame and nothing drifts.
 - **Terminal**: `hooks/scene-client.tsx` is a `Client` surface module with its own frame clock. It draws two pixels per cell with `▀`, and its camera follows Clawd across a crop of up to 150 columns.
 - `hooks/decor.ts` adds the holidays and the falling petals and leaves; `hooks/seasons.ts` works out the season and the holiday.
 - `hooks/i18n.ts` holds every string in both languages.
