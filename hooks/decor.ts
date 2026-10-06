@@ -16,10 +16,11 @@ export function skyArea(theme: Theme): readonly Box[] {
 
 const inArea = (area: readonly Box[], x: number, y: number): boolean => area.some(b => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h)
 
-type Falling = 'petals' | 'leaves' | null
+type Falling = 'petals' | 'leaves' | 'confetti' | null
 
-/** What falls: spring's petals or autumn's leaves. */
+/** What falls: birthday confetti all over, else spring's petals or autumn's leaves. */
 export function fallingOf(s: SceneProps): Falling {
+  if (s.isBirthday) return 'confetti'
   if (s.season === 'spring') return 'petals'
   if (s.season === 'autumn') return 'leaves'
   return null
@@ -103,18 +104,28 @@ export function decorParts(s: SceneProps): readonly Part[] {
 }
 
 const COUNT = 16
+const CONFETTI_COUNT = 26
+
+/** Where `kind` falls: confetti fills any scene, indoors or out; the rest only where the sky shows. */
+const areaOf = (kind: Exclude<Falling, null>, theme: Theme): readonly Box[] => (kind === 'confetti' ? [{ x: 0, y: 0, w: SW, h: 25 }] : skyArea(theme))
 
 /** The falling things at tick `t`, for the terminal: drawn over the Clawds. */
 export function drawFalling(g: Grid, t: number, s: SceneProps): void {
   const kind = fallingOf(s)
-  const area = skyArea(s.theme)
-  if (kind === null || area.length === 0) return
-  for (let i = 0; i < COUNT; i++) {
+  if (kind === null) return
+  const area = areaOf(kind, s.theme)
+  if (area.length === 0) return
+  for (let i = 0; i < (kind === 'confetti' ? CONFETTI_COUNT : COUNT); i++) {
     const x0 = hash(i * 31 + 7) % SW
     const y0 = hash(i * 17 + 3) % SH
     const y = (y0 + Math.floor(t / 4)) % SH
     const x = (x0 + Math.floor((t + i * 5) / 8) + (Math.floor((t + i * 3) / 6) % 2)) % SW
-    const color = kind === 'petals' ? C.blossom : ([C.autumnRed, C.autumnOrange, C.autumnYellow][i % 3] ?? C.autumnOrange)
+    const color =
+      kind === 'petals'
+        ? C.blossom
+        : kind === 'confetti'
+          ? ([C.red, C.yellow, C.blue, C.green, C.pink][i % 5] ?? C.red)
+          : ([C.autumnRed, C.autumnOrange, C.autumnYellow][i % 3] ?? C.autumnOrange)
     if (inArea(area, x, y)) px(g, x, y, color)
   }
 }
@@ -122,6 +133,7 @@ export function drawFalling(g: Grid, t: number, s: SceneProps): void {
 const HEX_OF: Record<Exclude<Falling, null>, readonly string[]> = {
   petals: ['#F6B6C8', '#FBD3DE'],
   leaves: ['#C8452E', '#E07B2E', '#E8B33A'],
+  confetti: ['#E5484D', '#F5C542', '#4D8DF6', '#4CB363', '#F6A5B8'],
 }
 
 /**
@@ -130,13 +142,14 @@ const HEX_OF: Record<Exclude<Falling, null>, readonly string[]> = {
  * and swaying as it goes.
  */
 export function fallingSvg(s: SceneProps): string {
-  const area = skyArea(s.theme)
   const kind = fallingOf(s)
-  if (area.length === 0 || kind === null) return ''
+  if (kind === null) return ''
+  const area = areaOf(kind, s.theme)
+  if (area.length === 0) return ''
   const clip = `<clipPath id="falling">${area.map(b => `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}"/>`).join('')}</clipPath>`
   const colors = HEX_OF[kind]
   const byColor = colors.map(() => '')
-  for (let i = 0; i < COUNT; i++) {
+  for (let i = 0; i < (kind === 'confetti' ? CONFETTI_COUNT : COUNT); i++) {
     const x = hash(i * 31 + 7) % SW
     const y = hash(i * 17 + 3) % SH
     byColor[i % colors.length] += `M${x} ${y}h1v1h-1zM${x} ${y - SH}h1v1h-1z`

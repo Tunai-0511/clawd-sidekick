@@ -32,6 +32,7 @@ export type FamilyId =
   | 'scenes'
   | 'holidays'
   | 'comeback'
+  | 'eggs'
 
 /** How a family's progress reads: a count, days, or time in hours or minutes. */
 export type Unit = 'count' | 'days' | 'hours' | 'minutes'
@@ -247,6 +248,16 @@ export const FAMILIES: readonly Family[] = [
     ],
   },
   {
+    id: 'eggs',
+    unit: 'count',
+    progress: l => l.eggs.length,
+    tiers: [
+      { tier: 'bronze', target: 1 },
+      { tier: 'silver', target: 3 },
+      { tier: 'gold', target: 5 },
+    ],
+  },
+  {
     id: 'comeback',
     unit: 'count',
     progress: l => l.comebacks,
@@ -293,6 +304,7 @@ export function emptyLife(): Life {
     bestDayTools: 0,
     scenes: [],
     holidays: [],
+    eggs: [],
   }
 }
 

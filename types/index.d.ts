@@ -22,6 +22,8 @@ export type Pose =
   | 'mail'
   /** The conversation is being compacted. */
   | 'tidy'
+  /** Too long at work without a break: a stretch, and a nudge to take one. */
+  | 'stretch'
 
 export type Deadline = {
   id: string
@@ -62,9 +64,12 @@ export type Doing =
   | 'stamp'
   | 'mail'
   | 'tidy'
+  | 'stretch'
+  | 'eat'
+  | 'sip'
 
 /** What the crew plays in the game room. */
-export type Game = 'pong' | 'volley' | 'rope' | 'tower' | 'sleep'
+export type Game = 'pong' | 'volley' | 'rope' | 'tower' | 'sleep' | 'lunch' | 'tea'
 
 /** Where the Clawds live: every scene has the same five zones. */
 export type Theme = 'house' | 'beach' | 'space' | 'forest'
@@ -132,6 +137,12 @@ export type SceneProps = {
   pal: Pal | null
   /** Commits stamped and pushes sealed in gold. */
   golden: { stamp: boolean; seal: boolean }
+  /** A rare sight now and then: a shooting star, or the scene's own visitor. */
+  egg: Egg | null
+  /** The person's birthday: party hats for everyone and confetti. */
+  isBirthday: boolean
+  /** The names the person gave the Clawds, by actor id. */
+  names: Record<string, string>
   season: Season
   holiday: Holiday
 }
@@ -165,6 +176,9 @@ export type Day = {
 }
 
 export type Tier = 'bronze' | 'silver' | 'gold' | 'legend'
+
+/** The rare sights: a shooting star across any scene's sky, or a scene's own critter. */
+export type Egg = 'star' | 'critter'
 
 /** What a trophy can bring the main Clawd to wear. */
 export type Hat = 'party' | 'crown' | 'halo' | 'wizard' | 'captain' | 'flower' | 'explorer' | 'graduation' | 'headphones'
@@ -207,6 +221,8 @@ export type Life = {
   bestDayTools: number
   scenes: Theme[]
   holidays: Holiday[]
+  /** The rare sights seen: 'star', and 'critter:<theme>' for each scene's visitor. */
+  eggs: string[]
 }
 
 /** The trophies reached (`family:tier` → when), and what the main Clawd wears and walks with. */
@@ -257,6 +273,11 @@ declare module 'claude-code' {
       trophies: Trophies
       /** The other sessions on this machine heard from in the last 45 seconds. */
       neighbors: Neighbor[]
+      /** The rare sight on show, if any. */
+      egg: Egg | null
+      /** The person's birthday as 'MM-DD', '' when not given. */
+      birthday: string
+      names: Record<string, string>
     }
   }
 }

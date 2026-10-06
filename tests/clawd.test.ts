@@ -7,7 +7,7 @@ import { isTestRun, momentOf } from '../hooks/events'
 import { dateOf, dayBefore, emptyDay, poseOf, recapSvg, streakOf } from '../hooks/recap'
 import { MEDAL_BOX } from '../hooks/decor'
 import { emptyLife, FAMILIES, hatFor, lifeFromDays, medalsOf, palFor, reached, TROPHY_TOTAL } from '../hooks/trophies'
-import { composeScene, hatRise, hitTest, layoutFor, SPOT_X, tipOf } from '../hooks/scene'
+import { composeScene, eggOf, hatRise, hitTest, layoutFor, SPOT_X, STAR_TICKS, tipOf } from '../hooks/scene'
 import { sceneSvg } from '../hooks/scene-svg'
 import { holidayOf, isSouthern, seasonOf, zoneOf } from '../hooks/seasons'
 import { CYCLE, frame, H, POSES, W } from '../hooks/sprite'
@@ -44,10 +44,13 @@ const sceneOf = (game: Game, time: TimeOfDay = 'day', lang: 'zh' | 'en' = 'zh', 
   memory: 5,
   isTired: false,
   medals: [],
-  trophyCount: [0, 75],
+  trophyCount: [0, 78],
   hat: null,
   pal: null,
   golden: { stamp: false, seal: false },
+  egg: null,
+  isBirthday: false,
+  names: {},
   season,
   holiday: 'none',
 })
@@ -239,8 +242,8 @@ describe('trophies', () => {
     return { ...s, actors: s.actors.map(a => (a.cap === null ? { ...a, fromX: SPOT_X.code, toX: SPOT_X.code, departAt: 0, doing: 'code' as const, label: '改 app.ts' } : a)) }
   }
 
-  test('75 goals in rising tiers, from a first commit to a hundred days in a row', async () => {
-    expect(TROPHY_TOTAL).toBe(75)
+  test('78 goals in rising tiers, from a first commit to a hundred days in a row', async () => {
+    expect(TROPHY_TOTAL).toBe(78)
     for (const family of FAMILIES) {
       const targets = family.tiers.map(t => t.target)
       expect([...targets].sort((a, b) => a - b)).toEqual(targets)
@@ -307,7 +310,7 @@ describe('trophies', () => {
       expect(ran.text).toBeUndefined()
       return { text: w.toasts.at(-1) ?? '' }
     }
-    expect((await run('trophies')).text).toContain('已解鎖 1 / 75')
+    expect((await run('trophies')).text).toContain('已解鎖 1 / 78')
     expect((await run('hat crown')).text).toContain('還沒解鎖王冠')
     const pane = await $.ui.mount({ plugin: 'clawd-sidekick', surface: 'terminal', component: 'Pane', requestId: 'clawd-trophies', props: { title: '成就', isFocused: true, bodyColumns: 100, placement: 'dock' } } as never)
     expect(await pane.find({ text: /連續開工/ })).toBeDefined()
@@ -355,6 +358,125 @@ describe('neighbors', () => {
     const after = String((await ui.find({ type: 'Svg' }))?.props.source)
     expect(after).not.toContain('api・')
     expect(after).toContain('在打排球')
+  })
+})
+
+describe('daily life, rare sights and making them yours', () => {
+  const differing = (a: Uint8Array, b: Uint8Array, box: { x: number; y: number; w: number; h: number }): number => {
+    let n = 0
+    for (let y = box.y; y < box.y + box.h; y++) for (let x = box.x; x < box.x + box.w; x++) if (a[y * 256 + x] !== b[y * 256 + x]) n++
+    return n
+  }
+  const crewAt = (theme: Theme, game: Game): SceneProps => ({ ...sceneOf(game, 'day', 'zh', theme), actors: [sceneOf(game).actors[0]!, ...crewIn(game)] })
+  /** Taipei time on the test day, as UTC milliseconds. */
+  const taipei = (hour: number, minute = 0): number => Date.UTC(2026, 9, 6, hour - 8, minute)
+
+  test('lunch at noon and tea at three, laid out in every scene', async () => {
+    for (const theme of THEME_ORDER) {
+      for (const game of ['lunch', 'tea'] as const) {
+        const frames = [0, 3, 9].map(t => composeScene(crewAt(theme, game), t, NOW))
+        const pong = composeScene(crewAt(theme, 'pong'), 0, NOW)
+        expect(differing(frames[0]!, pong, { x: 174, y: 14, w: 82, h: 11 })).toBeGreaterThan(20)
+        expect(frames.some((g, i) => i > 0 && differing(g, frames[0]!, { x: 174, y: 10, w: 82, h: 15 }) > 0)).toBe(true)
+        expect(sceneSvg(crewAt(theme, game), NOW).length).toBeLessThan(131072)
+      }
+    }
+  })
+
+  for (const [hour, minute, words] of [[12, 30, '在吃午餐'], [15, 10, '在喝下午茶']] as const) {
+    test(`the crew keeps its own day: at ${hour}:${minute} they are ${words}, even while Claude works`, async ($, on) => {
+      world(on, [], {}, 'zh-Hant-TW', { now: taipei(hour, minute) })
+      await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+      await $.turn.start({ text: '修 bug', turnId: 't1' })
+      const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+      expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toContain(words)
+    })
+  }
+
+  test('fifty minutes at work without a break brings a stretch and a nudge', async ($, on) => {
+    const w = world(on, [], {}, 'zh-Hant-TW', { now: taipei(9) })
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    await $.turn.start({ text: '大工程', turnId: 't1' })
+    await w.clock.advance(45 * 60_000)
+    expect(w.toasts.some(t => t.includes('伸展'))).toBe(false)
+    await w.clock.advance(6 * 60_000)
+    expect(w.toasts.some(t => t.includes('連續工作 50 分鐘'))).toBe(true)
+  })
+
+  test('rare sights come now and then, a star only in a dark sky, and every scene has its critter', async () => {
+    const windows: number[] = []
+    for (let t = NOW; windows.length < 40; t += 10 * 60_000) if (eggOf(t, 'night', 'house') !== null) windows.push(t)
+    const day = (windows[39]! - NOW) / 86_400_000
+    expect(day).toBeGreaterThan(3)
+    expect(windows.every(t => eggOf(t + 91_000, 'night', 'house') === null)).toBe(true)
+    expect(windows.map(t => eggOf(t, 'day', 'house'))).not.toContain('star')
+    expect(windows.map(t => eggOf(t, 'night', 'house'))).toContain('star')
+    for (const theme of THEME_ORDER) {
+      const { star, critter } = THEMES[theme].eggs
+      const still = composeScene(crewAt(theme, 'pong'), 0, NOW)
+      const critterFrames = Array.from({ length: critter.ticks }, (_, t) => composeScene({ ...crewAt(theme, 'pong'), egg: 'critter' }, t, NOW))
+      expect(critterFrames.some(g => differing(g, still, critter.box) > 4)).toBe(true)
+      const starFrames = Array.from({ length: STAR_TICKS }, (_, t) => composeScene({ ...crewAt(theme, 'pong'), egg: 'star' }, t, NOW))
+      expect(starFrames.some(g => differing(g, still, star) > 2)).toBe(true)
+      for (const egg of ['star', 'critter'] as const) expect(sceneSvg({ ...crewAt(theme, 'pong'), egg }, NOW).length).toBeLessThan(131072)
+    }
+  })
+
+  test('a rare sight says so once and counts toward the trophies', async ($, on) => {
+    // A window with a rare sight in Taipei's daytime, when it is the house's sparrow.
+    let at = NOW
+    const hour = (t: number): number => new Date(t + 8 * 3_600_000).getUTCHours()
+    while (eggOf(at, 'day', 'house') === null || hour(at) < 8 || hour(at) >= 16) at += 10 * 60_000
+    const w = world(on, [], {}, 'zh-Hant-TW', { now: at + 5_000 })
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    await w.clock.advance(30_000)
+    expect(w.toasts.filter(t => t.includes('小麻雀'))).toHaveLength(1)
+    expect(w.toasts.some(t => t.includes('稀有景象・銅'))).toBe(true)
+  })
+
+  test('on your birthday everyone wears a party hat and confetti falls, in every scene', async ($, on) => {
+    for (const theme of THEME_ORDER) {
+      const party = { ...crewAt(theme, 'pong'), isBirthday: true }
+      expect(differing(composeScene(party, 0, NOW), composeScene(crewAt(theme, 'pong'), 0, NOW), { x: 174, y: 8, w: 82, h: 6 })).toBeGreaterThan(6)
+      expect(sceneSvg(party, NOW)).toContain('#F5C542')
+    }
+    const w = world(on)
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    await $.command.run({ command: 'clawd', args: 'birthday 10/6', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    expect(w.toasts.some(t => t.includes('生日快樂'))).toBe(true)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toContain('clip-path="url(#falling)"')
+  })
+
+  test('the Clawds take the names and caps you give them', async ($, on) => {
+    const w = world(on)
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    const run = (args: string) => $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    await run('name 小橘')
+    await run('name 1 小藍')
+    await run('cap 1 red')
+    expect(w.toasts.at(-1)).toContain('小藍換上了紅帽')
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const svg = String((await ui.find({ type: 'Svg' }))?.props.source)
+    expect(svg).toContain('小橘 · ')
+    expect(svg).toContain('小藍 · ')
+    const pane = await $.ui.mount({ plugin: 'clawd-sidekick', surface: 'desktop', component: 'Pane', requestId: 'clawd-recap', props: { title: '', isFocused: true, bodyColumns: 90, placement: 'dock' } } as never)
+    expect(String((await pane.find({ type: 'Svg' }))?.props.source)).toContain('小橘的一天')
+  })
+
+  test('each project keeps the scene it last chose', async ($, on) => {
+    const w = world(on)
+    const start = () => $.session.start({ cwd: w.root, surface: 'terminal', isInteractive: true })
+    const run = (args: string) => $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    const scene = async (): Promise<string> => String((await (await $.ui.mount({ ...BAND, surface: 'desktop' })).find({ type: 'Svg' }))?.props.source)
+    await start()
+    await run('scene beach')
+    w.root = '/Users/me/projects/api'
+    await start()
+    await run('scene forest')
+    w.root = '/Users/me/projects/my-app'
+    await start()
+    expect(await scene()).toContain('沙灘球場')
   })
 })
 

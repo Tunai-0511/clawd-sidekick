@@ -20,7 +20,10 @@ import {
   drawBackground,
   gameRoom,
   drawPal,
+  drawStar,
   hatRise,
+  STAR_LOOP,
+  STAR_TICKS,
   PAL_FROM,
   PAL_LOOP,
   PAL_TO,
@@ -166,6 +169,32 @@ function palSvg(s: SceneProps): string {
   )
 }
 
+/**
+ * The rare sight on show: a shooting star whose streak's frames take turns
+ * for a moment each loop, or the scene's critter on a clear ground. Both sit
+ * over the scene and under the Clawds; reduced motion keeps them still.
+ */
+function eggSvg(s: SceneProps): string {
+  if (s.egg === null) return ''
+  const eggs = THEMES[s.theme].eggs
+  if (s.egg === 'critter') {
+    const frames: Grid[] = []
+    for (let t = 0; t < eggs.critter.ticks; t++) {
+      const g = blank()
+      eggs.critter.draw(g, t)
+      frames.push(g)
+    }
+    return `<g class="quiet">${layered(frames, eggs.critter.box)}</g>`
+  }
+  const streak: string[] = []
+  for (let k = 0; k < STAR_LOOP; k++) {
+    const g = blank()
+    if (k < STAR_TICKS) drawStar(g, eggs.star, k)
+    streak.push(paths(g, eggs.star))
+  }
+  return `<g class="quiet drift">${flipbook(streak)}</g>`
+}
+
 /** The sleepers' blankets, over the sleepers. */
 function covers(s: SceneProps, play: Play, now: number): string {
   const g = blank()
@@ -258,7 +287,7 @@ function actor(a: SceneActor, index: number, s: SceneProps, now: number, play: P
   // Asking, he holds up a sign of his own; the band's line says what for.
   const label = a.doing === 'ask' ? '' : bubble(a.label, a.cap === null, headroom(a, s))
   const stay = `<g class="act">${frames(a.doing, LOOP, true)}</g>${PET}`
-  const title = `<title>${escape(actorTip(a, s.lang))}</title>`
+  const title = `<title>${escape(actorTip(a, s))}</title>`
   if (x === a.toX) return `<g class="clawd" transform="translate(${a.toX - REF} 0)">${title}${stay}${label}</g>`
   const dur = (Math.abs(a.toX - x) / SPEED).toFixed(3)
   return (
@@ -336,7 +365,7 @@ export function sceneSvg(s: SceneProps, now: number): string {
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SW} ${SH}" width="100%" height="100%" shape-rendering="crispEdges">` +
     STYLE +
-    `<g class="art">${house(s, play)}${clouds(s)}${signs(s)}</g>` +
+    `<g class="art">${house(s, play)}${clouds(s)}${eggSvg(s)}${signs(s)}</g>` +
     hovers(s) +
     order.map(({ a, i }) => actor(a, i, s, now, play)).join('') +
     covers(s, play, now) +

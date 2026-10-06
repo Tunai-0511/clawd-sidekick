@@ -8,9 +8,9 @@
 // Pure drawing: the terminal client composes frames from it at its own frame
 // rate, and scene-svg.ts turns the same frames into an animated SVG.
 
-import type { Doing, Game, Hat, Pal, SceneActor, SceneProps, Theme, TimeOfDay } from '../types'
+import type { Doing, Egg, Game, Hat, Pal, SceneActor, SceneProps, Theme, TimeOfDay } from '../types'
 import { say, type Lang, type RoomId } from './i18n'
-import { blank, C, FEET, FLOOR, px, rect, type Box, type Grid } from './pixels'
+import { blank, C, FEET, FLOOR, hash, px, rect, type Box, type Grid } from './pixels'
 import { decorate, drawFalling, MEDAL_BOX } from './decor'
 import { drawScene, THEMES } from './themes'
 
@@ -87,6 +87,30 @@ const LAYOUTS: Record<Game, readonly (readonly Slot[] | undefined)[]> = {
       { x: 186, doing: 'clap', role: 'C' },
       { x: 202, doing: 'tower', role: 'L' },
       { x: 226, doing: 'tower', role: 'R' },
+    ],
+  ],
+  lunch: [
+    [{ x: 207, doing: 'eat', role: 'E' }],
+    [
+      { x: 194, doing: 'eat', role: 'E' },
+      { x: 222, doing: 'eat', role: 'E' },
+    ],
+    [
+      { x: 186, doing: 'eat', role: 'E' },
+      { x: 207, doing: 'eat', role: 'E' },
+      { x: 228, doing: 'eat', role: 'E' },
+    ],
+  ],
+  tea: [
+    [{ x: 207, doing: 'sip', role: 'T' }],
+    [
+      { x: 194, doing: 'sip', role: 'T' },
+      { x: 222, doing: 'sip', role: 'T' },
+    ],
+    [
+      { x: 186, doing: 'sip', role: 'T' },
+      { x: 207, doing: 'sip', role: 'T' },
+      { x: 228, doing: 'sip', role: 'T' },
     ],
   ],
   sleep: [
@@ -239,6 +263,34 @@ export function gameRoom(g: Grid, t: number, play: Play): void {
         rect(g, slot.x, 24, 16, 1, [C.sky, C.pink, C.green][i] ?? C.sky)
         rect(g, slot.x - 2, 22, 3, 2, C.white)
       })
+      break
+    case 'lunch': {
+      // A checked picnic cloth, and a lunch box beside each of them.
+      if (play.slots.length === 0) break
+      const from = (play.slots[0]?.x ?? 186) - 2
+      for (let x = from; x < Math.min(252, from + play.slots.length * 21 + 8); x++) px(g, x, 24, Math.floor(x / 2) % 2 === 0 ? C.red : C.white)
+      for (const slot of play.slots) {
+        const x = slot.x + 16
+        if (x + 4 > 252) continue
+        rect(g, x, 21, 4, 3, C.dark)
+        rect(g, x + 1, 22, 2, 1, C.white)
+        px(g, x + 3, 22, C.yellow)
+        px(g, x, 21, C.red)
+      }
+      break
+    }
+    case 'tea':
+      // A little table with a teapot and a slice of cake beside each of them.
+      for (const slot of play.slots) {
+        const x = slot.x + 16
+        if (x + 5 > 252) continue
+        rect(g, x, 21, 5, 1, C.wood)
+        rect(g, x + 2, 22, 1, 3, C.wood)
+        rect(g, x + 1, 19, 2, 2, C.white)
+        px(g, x, 19, C.white)
+        px(g, x + 3, 20, C.pink)
+        px(g, x + 4, 20, C.yellow)
+      }
       break
   }
 }
@@ -450,6 +502,20 @@ export function drawClawd(g: Grid, x: number, t: number, doing: Doing | 'walk', 
       armR = 'up'
       if (k % 12 < 2) y -= 1
       break
+    case 'eat':
+      eyes = k % 16 < 10 ? 'happy' : 'open'
+      armR = k % 8 < 3 ? 'up' : 'mid'
+      break
+    case 'sip':
+      eyes = k % 12 < 4 ? 'closed' : 'open'
+      armR = k % 12 < 4 ? 'up' : 'mid'
+      break
+    case 'stretch':
+      eyes = 'closed'
+      armL = 'up'
+      armR = 'up'
+      if (k % 8 < 4) y -= 1
+      break
     case 'idle':
       if (k % 48 >= 28 && k % 48 < 34) look = -1
       if (k % 48 >= 36 && k % 48 < 42) look = 1
@@ -559,7 +625,8 @@ export const isNervous = (s: SceneProps): boolean => s.urgency === 'near' || s.u
 /** What the Clawds wear: scarves in winter; the main Clawd's trophy hat, else a holiday's; tired eyes late in the five-hour window; gold seals once earned. */
 export function outfitOf(a: SceneActor, s: SceneProps): Mod {
   const holidayHat = s.holiday === 'christmas' ? 'santa' : s.holiday === 'halloween' ? 'witch' : undefined
-  const hat = a.cap !== null ? undefined : (s.hat ?? holidayHat)
+  // A birthday puts everyone at home in a party hat.
+  const hat = s.isBirthday && a.neighbor === undefined ? 'party' : a.cap !== null ? undefined : (s.hat ?? holidayHat)
   return { hasScarf: s.season === 'winter', isTired: s.isTired, ...(hat === undefined ? {} : { hat }), ...(a.cap === null ? { golden: s.golden } : {}) }
 }
 
@@ -670,6 +737,32 @@ function drawProps(g: Grid, x: number, y: number, k: number, doing: Doing | 'wal
       }
       break
     }
+    case 'eat': {
+      // A rice ball in his hand, up to his face now and then.
+      const isUp = k % 8 < 3
+      const ox = x + (isUp ? 15 : 16)
+      const oy = isUp ? y - 1 : y + 2
+      px(g, ox + 1, oy, C.white)
+      rect(g, ox, oy + 1, 3, 1, C.white)
+      rect(g, ox, oy + 2, 3, 1, C.dark)
+      break
+    }
+    case 'sip': {
+      // A cup of tea, steam rising from it.
+      const isUp = k % 12 < 4
+      const cx = x + (isUp ? 15 : 16)
+      const cy = isUp ? y + 1 : y + 3
+      rect(g, cx, cy, 2, 2, C.white)
+      px(g, cx + 2, cy, C.white)
+      if (k % 6 < 4) px(g, cx + (k % 2), cy - 1 - Math.floor((k % 6) / 2), C.light)
+      break
+    }
+    case 'stretch':
+      if (k % 8 < 4) {
+        px(g, x - 2, y + 1, C.yellow)
+        px(g, x + 17, y + 1, C.yellow)
+      }
+      break
     case 'tidy': {
       // An armful of books, held high on the way back to the shelf.
       const top = y - 4 - (k % 12 < 2 ? 1 : 0)
@@ -734,6 +827,8 @@ export function playPose(actor: SceneActor, t: number, play: Play): Mod {
       if (!isPlacing) return { look: role === 'L' ? 1 : -1 }
       return role === 'L' ? { armR: 'up', look: 1 } : { armL: 'up', look: -1 }
     }
+    case 'lunch':
+    case 'tea':
     case 'sleep':
       return {}
   }
@@ -745,6 +840,55 @@ export type ComposeOptions = BackgroundOptions & {
 }
 
 /** The whole scene at tick `t`, wall-clock `now`. */
+// ── The rare sights ───────────────────────────────────────────────────────
+
+const EGG_WINDOW = 10 * 60_000
+const EGG_SHOW = 90_000
+
+/**
+ * The rare sight at `now`, the same for every session and every redraw: about
+ * one ten-minute window in twenty-five has one, for its first minute and a
+ * half. A shooting star needs a dark sky (dusk, night, or space); otherwise
+ * it is the scene's own critter.
+ */
+export function eggOf(now: number, time: TimeOfDay, theme: Theme): Egg | null {
+  const window = Math.floor(now / EGG_WINDOW)
+  const h = hash(window * 7919 + 29)
+  if (h % 25 !== 0 || now % EGG_WINDOW >= EGG_SHOW) return null
+  const isDark = theme === 'space' || time !== 'day'
+  return isDark && (h >> 8) % 2 === 0 ? 'star' : 'critter'
+}
+
+/** Ticks a shooting star's loop takes, and how many of them it is in the sky. */
+export const STAR_LOOP = 32
+export const STAR_TICKS = 10
+
+/** Where a shooting star's head is `k` ticks into its streak across `box`: down and to the left. */
+export function starAt(box: Box, k: number): { x: number; y: number } {
+  const step = box.w > 60 ? 3 : 2
+  return { x: box.x + box.w - 3 - k * step, y: box.y + 1 + Math.floor((k * (box.h - 3)) / STAR_TICKS) }
+}
+
+/** A shooting star's head and tail, inside `box`. */
+export function drawStar(g: Grid, box: Box, k: number): void {
+  const { x, y } = starAt(box, k)
+  const step = box.w > 60 ? 3 : 2
+  const inside = (px_: number, py: number): boolean => px_ >= box.x && px_ < box.x + box.w && py >= box.y && py < box.y + box.h
+  for (let i = 3; i >= 0; i--) {
+    const tx = x + i * step
+    const ty = y - Math.round((i * (box.h - 3)) / STAR_TICKS)
+    if (inside(tx, ty)) px(g, tx, ty, i === 0 ? C.white : i === 1 ? C.ember : C.light)
+  }
+}
+
+/** The rare sight on show at tick `t`, for the terminal: the star while it streaks, or the scene's critter. */
+function drawEgg(g: Grid, t: number, s: SceneProps): void {
+  if (s.egg === null) return
+  const eggs = THEMES[s.theme].eggs
+  if (s.egg === 'critter') eggs.critter.draw(g, t)
+  else if (t % STAR_LOOP < STAR_TICKS) drawStar(g, eggs.star, t % STAR_LOOP)
+}
+
 // ── The pal ───────────────────────────────────────────────────────────────
 
 type PalArt = { frames: readonly [readonly string[], readonly string[]]; key: Readonly<Record<string, number>> }
@@ -804,6 +948,7 @@ export function composeScene(s: SceneProps, t: number, now: number, options: Com
   const g = blank()
   const play = playOf(s, now)
   drawBackground(g, t, s, play, options)
+  drawEgg(g, t, s)
   const order = [...s.actors].sort((a, b) => Number(a.id === 'main') - Number(b.id === 'main'))
   order.forEach((actor, i) => {
     const x = actorX(actor, now)
@@ -823,10 +968,10 @@ export function composeScene(s: SceneProps, t: number, now: number, options: Com
 // ── What the pointer finds ─────────────────────────────────────────────────
 
 /** What hovering a Clawd says about him. */
-export function actorTip(a: SceneActor, lang: Lang): string {
-  const words = say(lang)
+export function actorTip(a: SceneActor, s: Pick<SceneProps, 'lang' | 'names'>): string {
+  const words = say(s.lang)
   if (a.neighbor !== undefined) return `${words.neighborClawd(a.neighbor)} · ${a.label || words.doings[a.doing]}`
-  const name = a.cap === null ? words.mainClawd : words.crewClawd(words.caps[a.cap] ?? '')
+  const name = s.names[a.id] ?? (a.cap === null ? words.mainClawd : words.crewClawd(words.caps[a.cap] ?? ''))
   if (a.agentKey !== undefined) return `${name} · ${words.forSubagent(a.label || words.gettingReady)}`
   if (a.cap === null) return `${name} · ${a.label || words.doings[a.doing]}`
   return `${name} · ${words.doings[a.doing]}`
@@ -861,7 +1006,7 @@ export function tipOf(s: SceneProps, hit: Hit): string {
   switch (hit.kind) {
     case 'actor': {
       const a = s.actors.find(one => one.id === hit.id)
-      return a === undefined ? '' : actorTip(a, s.lang)
+      return a === undefined ? '' : actorTip(a, s)
     }
     case 'board':
       return s.notes.length === 0 ? words.boardEmpty : words.board(s.notes.map(n => n.text))

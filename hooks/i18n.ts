@@ -41,6 +41,9 @@ type Doings =
   | 'stamp'
   | 'mail'
   | 'tidy'
+  | 'stretch'
+  | 'eat'
+  | 'sip'
 
 export type Strings = {
   // What Clawd is doing, from a tool call
@@ -131,6 +134,22 @@ export type Strings = {
   recapWeek: string
   recapStreak: (days: number) => string
   recapLine: (d: { turns: number; work: string; tools: number; edits: number; passed: number; failed: number; commits: number; pushes: number; streak: number }) => string
+  // Daily life, rare sights, birthdays, names
+  takeBreak: string
+  breakToast: (minutes: number) => string
+  eggStar: string
+  eggCritter: Record<Theme, string>
+  birthdayToast: (name: string) => string
+  recapTitleOf: (name: string) => string
+  crewNumber: (n: number) => string
+  nameSet: (who: string, name: string) => string
+  nameReset: string
+  nameUsage: string
+  capSet: (who: string, cap: string) => string
+  capUsage: string
+  birthdaySet: (date: string) => string
+  birthdayOff: string
+  birthdayUsage: string
   // Neighbors: the other sessions on this machine
   neighborClawd: (project: string) => string
   neighborsLabel: string
@@ -275,7 +294,7 @@ const zh: Strings = {
   petted: count => `被摸了 ${count} 次`,
   describeClawd: 'Clawd 副駕：打開面板（/clawd recap 今日戰報、/clawd trophies 成就、/clawd scene 換場景、/clawd hide 收合、/clawd lang en 換英文）',
   describeDeadline: '截止日雷達：越接近 Clawd 越慌',
-  hintClawd: '[recap|trophies|hat|pal|scene 名稱|season|holiday|hide|show|lang]',
+  hintClawd: '[recap|trophies|hat|pal|name|cap|birthday|scene 名稱|season|holiday|hide|show|lang]',
   hintDeadline: '[add 12/24 名稱|rm N]',
   folded: 'Clawd 收成一行了，/clawd show 叫他回來。',
   unfolded: 'Clawd 回來了。',
@@ -304,6 +323,21 @@ const zh: Strings = {
   recapStreak: days => (days > 0 ? `連續 ${days} 天` : '今天開工吧'),
   recapLine: d =>
     `今天 ${d.turns} 個回合、工作了 ${d.work}：用了 ${d.tools} 次工具、改了 ${d.edits} 個檔，測試 ${d.passed} 過 ${d.failed} 沒過，${d.commits} 次 commit、${d.pushes} 次 push。連續 ${d.streak} 天。`,
+  takeBreak: '休息一下吧',
+  breakToast: minutes => `已經連續工作 ${minutes} 分鐘了，起來伸展一下吧`,
+  eggStar: '✨ 有流星！快看天空',
+  eggCritter: { house: '🐦 窗台上來了一隻小麻雀', beach: '🐋 遠方有鯨魚在噴水', space: '🛸 觀測窗外飛過一架 UFO', forest: '🦌 樹叢後面有隻鹿在偷看' },
+  birthdayToast: name => `🎂 生日快樂！${name}和夥伴們都戴上了派對帽`,
+  recapTitleOf: name => `${name}的一天`,
+  crewNumber: n => `夥伴 ${n}`,
+  nameSet: (who, name) => `${who}現在叫「${name}」了。`,
+  nameReset: '名字都改回預設了。',
+  nameUsage: '用法：/clawd name 名字（主 Clawd）、/clawd name 1 名字（夥伴 1–3），或 /clawd name reset',
+  capSet: (who, cap) => `${who}換上了${cap}。`,
+  capUsage: '用法：/clawd cap 1 red（夥伴 1–3；顏色有 blue、green、purple、red、yellow、teal、pink）',
+  birthdaySet: date => `記住了，你的生日是 ${date}。那天大家會戴派對帽慶祝。`,
+  birthdayOff: '生日設定拿掉了。',
+  birthdayUsage: '用法：/clawd birthday 10/31，或 /clawd birthday off',
   neighborClawd: project => `鄰居 Clawd（${project}）`,
   neighborsLabel: '鄰居',
   tiers: { bronze: '銅', silver: '銀', gold: '金', legend: '傳說' },
@@ -328,6 +362,7 @@ const zh: Strings = {
     scenes: '環遊四景',
     holidays: '節日也上工',
     comeback: '逆轉勝',
+    eggs: '稀有景象',
   },
   hats: { party: '派對帽', crown: '王冠', halo: '光環', wizard: '巫師帽', captain: '船長帽', flower: '小花', explorer: '探險帽', graduation: '學士帽', headphones: '耳機' },
   pals: { cat: '貓咪', owl: '貓頭鷹', crab: '小螃蟹' },
@@ -416,8 +451,11 @@ const zh: Strings = {
     stamp: '在 commit 上蓋章',
     mail: '把 push 寄出去',
     tidy: '在整理記憶',
+    stretch: '在伸懶腰',
+    eat: '在吃午餐',
+    sip: '在喝下午茶',
   },
-  caps: { blue: '藍帽', green: '綠帽', purple: '紫帽' },
+  caps: { blue: '藍帽', green: '綠帽', purple: '紫帽', red: '紅帽', yellow: '黃帽', teal: '青帽', pink: '粉紅帽' },
   mainClawd: '主 Clawd',
   crewClawd: cap => `${cap} Clawd`,
   forSubagent: task => `替子代理工作：${task}`,
@@ -507,7 +545,7 @@ const en: Strings = {
   petted: count => (count === 1 ? 'Petted once' : `Petted ${count} times`),
   describeClawd: 'Clawd Sidekick: open the pane (/clawd recap shows your day, /clawd trophies your trophies, /clawd scene changes the scene, /clawd hide folds the band, /clawd lang zh switches to Chinese)',
   describeDeadline: 'Deadline radar: the closer it gets, the more Clawd frets',
-  hintClawd: '[recap|trophies|hat|pal|scene name|season|holiday|hide|show|lang]',
+  hintClawd: '[recap|trophies|hat|pal|name|cap|birthday|scene name|season|holiday|hide|show|lang]',
   hintDeadline: '[add 12/24 name|rm N]',
   folded: 'Clawd folded into one line. /clawd show brings him back.',
   unfolded: 'Clawd is back.',
@@ -538,6 +576,21 @@ const en: Strings = {
   recapStreak: days => (days === 1 ? '1-day streak' : days > 0 ? `${days}-day streak` : 'Start a streak'),
   recapLine: d =>
     `Today: ${d.turns} turns over ${d.work}, ${d.tools} tool calls, ${d.edits} files edited, tests ${d.passed} passed and ${d.failed} failed, ${d.commits} commits, ${d.pushes} pushes. ${d.streak}-day streak.`,
+  takeBreak: 'Time for a break',
+  breakToast: minutes => `${minutes} minutes at it without a break: time to get up and stretch`,
+  eggStar: '✨ A shooting star! Look at the sky',
+  eggCritter: { house: '🐦 A sparrow is hopping along the window sill', beach: '🐋 A whale is spouting far out at sea', space: '🛸 A UFO is gliding past the observatory window', forest: '🦌 A deer is peeking out from the bushes' },
+  birthdayToast: name => `🎂 Happy birthday! ${name} and the crew have their party hats on`,
+  recapTitleOf: name => `${name}'s day`,
+  crewNumber: n => `Crew ${n}`,
+  nameSet: (who, name) => `${who} is now called "${name}".`,
+  nameReset: 'Every name is back to the default.',
+  nameUsage: 'Usage: /clawd name <name> (the main Clawd), /clawd name 1 <name> (crew 1–3), or /clawd name reset',
+  capSet: (who, cap) => `${who} has a ${cap.toLowerCase()} on.`,
+  capUsage: 'Usage: /clawd cap 1 red (crew 1–3; colours: blue, green, purple, red, yellow, teal, pink)',
+  birthdaySet: date => `Got it: your birthday is ${date}. Everyone will wear party hats that day.`,
+  birthdayOff: 'Birthday forgotten.',
+  birthdayUsage: 'Usage: /clawd birthday 10/31, or /clawd birthday off',
   neighborClawd: project => `Neighbor Clawd (${project})`,
   neighborsLabel: 'neighbors',
   tiers: { bronze: 'Bronze', silver: 'Silver', gold: 'Gold', legend: 'Legendary' },
@@ -562,6 +615,7 @@ const en: Strings = {
     scenes: 'Globetrotter',
     holidays: 'Holiday shift',
     comeback: 'Comeback',
+    eggs: 'Rare sights',
   },
   hats: { party: 'party hat', crown: 'crown', halo: 'halo', wizard: 'wizard hat', captain: "captain's cap", flower: 'flower', explorer: "explorer's hat", graduation: 'mortarboard', headphones: 'headphones' },
   pals: { cat: 'cat', owl: 'owl', crab: 'little crab' },
@@ -650,8 +704,11 @@ const en: Strings = {
     stamp: 'stamping a commit',
     mail: 'sending a push off',
     tidy: 'tidying the memory',
+    stretch: 'stretching',
+    eat: 'having lunch',
+    sip: 'having tea',
   },
-  caps: { blue: 'Blue-cap', green: 'Green-cap', purple: 'Purple-cap' },
+  caps: { blue: 'Blue-cap', green: 'Green-cap', purple: 'Purple-cap', red: 'Red-cap', yellow: 'Yellow-cap', teal: 'Teal-cap', pink: 'Pink-cap' },
   mainClawd: 'Clawd',
   crewClawd: cap => `${cap} Clawd`,
   forSubagent: task => `working for a subagent: ${task}`,

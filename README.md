@@ -46,9 +46,15 @@
 
 ![The moments in four scenes: Clawd holds up a "?" sign for your OK in the house, stamps a commit at the camp, sends a push off as an envelope on the beach, and carries the station's data off while compacting; the shelves and crystals show how full the context is](./docs/moments-en.png)
 
+**A life of their own.** The crew keeps its own day by your clock: a picnic lunch at noon and tea at three, even while Claude works. After fifty minutes of work without a break, Clawd stretches and nudges you to do the same. Now and then (a few times a day) a rare sight turns up for a minute and a half: a shooting star across a dark sky, a sparrow on the house's window sill, a whale spouting off the beach, a UFO past the space station's window, a deer peeking out at the camp. Seeing them counts toward a trophy.
+
+![The crew's picnic lunch and afternoon tea, the whale, the UFO and the deer, and a birthday with party hats and confetti](./docs/daily-life.png)
+
+**Make them yours.** `/clawd name Pip` names the main Clawd, and `/clawd name 1 Juniper` a crew member; `/clawd cap 1 red` gives them a beanie of your colour. Each project remembers the scene you last chose for it. `/clawd birthday 10/31` puts everyone in party hats, with confetti, on your birthday.
+
 **Neighbors.** Running Claude Code in more than one terminal or window? The other sessions' Clawds come to visit. Up to two busy neighbors walk in from the right to the room of whatever their Claude is doing, in caps of their own and with their project on their bubble, and walk back out when they stop or their session ends. The band lists the sessions next door. They talk through the plugin's own store on your machine; nothing leaves it.
 
-**Trophies.** 75 goals in 20 families, most in four tiers, from a first commit to a hundred days in a row, a million tool calls or a three-hour turn. Every family you reach hangs a medal under the game room's bunting. Some bring the main Clawd a hat (a party hat, a crown, a halo, a wizard hat…), a pal who walks the floor (a cat, an owl, a little crab), or a golden stamp and seal for your commits and pushes. `/clawd trophies` shows where you stand on each; `/clawd hat` and `/clawd pal` choose what he wears and who walks with him. The days you already worked count from the start.
+**Trophies.** 78 goals in 21 families, most in four tiers, from a first commit to a hundred days in a row, a million tool calls or a three-hour turn. Every family you reach hangs a medal under the game room's bunting. Some bring the main Clawd a hat (a party hat, a crown, a halo, a wizard hat…), a pal who walks the floor (a cat, an owl, a little crab), or a golden stamp and seal for your commits and pushes. `/clawd trophies` shows where you stand on each; `/clawd hat` and `/clawd pal` choose what he wears and who walks with him. The days you already worked count from the start.
 
 ![The medals under the bunting, a crowned Clawd and his cat, in all four scenes](./docs/trophies.png)
 
@@ -76,6 +82,7 @@
 | PRs merged | Pull requests merged | 1 | 25 | 100 | 500 |
 | Globetrotter | Scenes lived in | — | 4 + explorer's hat | — | — |
 | Holiday shift | Holidays worked through (Lunar New Year, Halloween, Christmas) | 1 | 2 | 3 | — |
+| Rare sights | Rare sights seen (a shooting star, each scene’s visitor) | 1 | 3 | 5 | — |
 | Comeback | Passing after three or more failures in a row | 1 | 10 | 50 | — |
 
 </details>
@@ -133,6 +140,9 @@ Third-party marketplaces don't auto-update by default, and a marketplace can't s
 | `/clawd trophies` | Every trophy family: your tier, your progress, what the next tier brings |
 | `/clawd hat <name>` · `auto` · `none` | Put on a hat you've earned (`auto`: the finest) |
 | `/clawd pal <name>` · `auto` · `none` | Choose the pal who walks the floor |
+| `/clawd name <name>` · `name 1 <name>` · `name reset` | Name the main Clawd or a crew member (1–3) |
+| `/clawd cap 1 red` | Give a crew member (1–3) a beanie: blue, green, purple, red, yellow, teal or pink |
+| `/clawd birthday 10/31` · `off` | Party hats and confetti on your birthday |
 | `/clawd scene house` · `beach` · `space` · `forest` · `next` | Move the Clawds to another scene |
 | `/clawd season winter` · `auto` | Set the season by hand, or follow the date |
 | `/clawd holiday christmas` · `lunar` · `halloween` · `none` · `auto` | Set the decorations by hand, or follow the date |
@@ -154,7 +164,7 @@ A mod runs with your permissions, so here is everything this one reaches (`claud
 
 - **Model calls and tokens: none.** Clawd never calls a model, never adds to the system prompt or to a tool's result, and its commands answer in a toast rather than in the conversation, so nothing it says is read by the model. Running a `/clawd` or `/deadline` command leaves only its own one-line record, as any slash command does.
 - **Processes**: `date +%z` and `readlink /etc/localtime` once at start, for your time zone and which way the seasons run; `defaults read -g AppleLanguages` once, on macOS, when the language is `auto` and no `LANG` is set.
-- **Storage**: your deadlines, scene, language, pet count, each day's figures for the recap, the running totals for the trophies, and each open session's word to its neighbors (its project and what it's doing, removed when it ends), in the plugin's own store on your machine.
+- **Storage**: your deadlines, scene, language, pet count, the names, caps and birthday you set, each project's scene, each day's figures for the recap, the running totals for the trophies, and each open session's word to its neighbors (its project and what it's doing, removed when it ends), in the plugin's own store on your machine.
 - **Environment**: reads `LANG`, `LC_ALL`, `LC_MESSAGES` and `TZ`.
 - **Network: none.**
 

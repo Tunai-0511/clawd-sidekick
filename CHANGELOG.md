@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.14.0
+
+- **A life of their own.** The crew keeps its own day by your clock: a picnic lunch at noon (rice balls, lunch boxes, a checked cloth) and tea at three (cups, a teapot, cake), whatever Claude is up to. After fifty minutes of work without a five-minute break, Clawd stretches and a toast suggests you do too, then every ten minutes he stretches again.
+- **Rare sights.** A few times a day, for a minute and a half, something turns up, the same in every session: a shooting star across a dark sky, or the scene's own visitor (a sparrow on the house's sill, a whale spouting off the beach, a UFO past the station's window, a deer peeking out at the camp). Each scene must have one (`ThemeArt.eggs`). Seeing them counts toward the new "Rare sights" trophies (78 now).
+- **Make them yours.** `/clawd name` names the main Clawd or a crew member (tooltips, the folded band, the standing-by line and the recap card use it); `/clawd cap 1 red` changes a crew member's beanie (visitors from other sessions pick colours the crew isn't wearing); each project remembers its scene; `/clawd birthday 10/31` brings party hats for everyone and confetti over any scene on the day.
+
 ## 0.13.1
 
 - The desktop's spinner row said the turn's state twice ("Working… 45s · thinking · Thinking"): the desktop names it after the row itself, so Clawd's line there is now the word and the clock.

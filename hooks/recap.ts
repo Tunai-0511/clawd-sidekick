@@ -143,12 +143,12 @@ const text = (x: number, y: number, size: number, fill: string, body: string, ex
  * with how long he worked and where, eight figures with their icons, the
  * rooms as one bar, the week's tool calls, the streak, and where to get him.
  */
-export function recapSvg(day: Day, week: readonly (Day | undefined)[], streak: number, lang: Lang, theme: Theme): string {
+export function recapSvg(day: Day, week: readonly (Day | undefined)[], streak: number, lang: Lang, theme: Theme, name?: string): string {
   const w = say(lang)
   const isQuiet = !hasWork(day)
   let out = ''
   out += '<rect x="0.5" y="0.5" width="239" height="139" rx="6" fill="#262624" stroke="#D97757" stroke-width="1"/>'
-  out += text(10, 17, 10, '#D97757', escape(w.recapTitle), 'font-weight="700"')
+  out += text(10, 17, 10, '#D97757', escape(name === undefined ? w.recapTitle : w.recapTitleOf(name)), 'font-weight="700"')
   out += text(230, 17, 6.5, '#A8A29E', escape(w.recapDate(day.date)), 'text-anchor="end"')
   // Clawd and his day in words
   out += `<svg x="8" y="24" width="84" height="29.4" viewBox="0 0 40 14" shape-rendering="crispEdges">${clawdArt(poseOf(day))}</svg>`

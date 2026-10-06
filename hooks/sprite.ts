@@ -56,6 +56,7 @@ export const POSES: readonly Pose[] = [
   'stamp',
   'mail',
   'tidy',
+  'stretch',
 ]
 
 /** Ticks before a pose's animation repeats. */
@@ -79,6 +80,7 @@ export const CYCLE: Record<Pose, number> = {
   stamp: 8,
   mail: 16,
   tidy: 12,
+  stretch: 16,
 }
 
 export type FrameOptions = {
@@ -456,6 +458,15 @@ export function frame(pose: Pose, t: number, options: FrameOptions = {}): Grid {
     case 'mail': {
       clawd(g, base({ eyes: 'happy', look: 1, armR: k < 3 ? 'up' : 'wave', hasBlush: true }))
       if (k >= 2 && k < 14) stamp(g, 29 + Math.floor((k - 2) * 0.6), 8 - Math.floor((k - 2) * 0.7), PLANE)
+      break
+    }
+    case 'stretch': {
+      const isUp = k % 8 < 4
+      clawd(g, base({ y: isUp ? 1 : 2, eyes: 'closed', armL: 'up', armR: 'up', isSquashed: !isUp }))
+      if (isUp) {
+        stamp(g, 3, 2, SPARKLE_B)
+        stamp(g, 34, 2, SPARKLE_B)
+      }
       break
     }
     case 'tidy': {

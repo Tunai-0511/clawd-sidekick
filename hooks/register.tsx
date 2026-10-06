@@ -10,10 +10,10 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement } from 'claude-code'
 
-import type { Activity, Day, Deadline, Doing, Game, Hat, Holiday, Life, Neighbor, Pal, Pose, RoomId, SceneActor, SceneProps, Season, Theme, Tier, TimeOfDay, Trophies, Usage } from '../types'
+import type { Activity, Day, Deadline, Doing, Egg, Game, Hat, Holiday, Life, Neighbor, Pal, Pose, RoomId, SceneActor, SceneProps, Season, Theme, Tier, TimeOfDay, Trophies, Usage } from '../types'
 import { countdown, formatDue, newId, parseDeadline, parseOffset, urgency, URGENCY_COLOR } from './deadline'
 import { langOf, say, type Lang } from './i18n'
-import { actorX, layoutFor, ROOMS, SH, SPOT_X, SW, type Spot } from './scene'
+import { actorX, eggOf, layoutFor, ROOMS, SH, SPOT_X, SW, type Spot } from './scene'
 import { miniClawdSvg, sceneSvg } from './scene-svg'
 import { H, W } from './sprite'
 import { THEME_ORDER } from './themes'
@@ -64,6 +64,9 @@ const zoneAtom = atom({ plugin: 'clawd-sidekick', key: 'zone' } as const, '')
 const todayAtom = atom({ plugin: 'clawd-sidekick', key: 'today' } as const, null)
 const trophiesAtom = atom({ plugin: 'clawd-sidekick', key: 'trophies' } as const, NO_TROPHIES)
 const neighborsAtom = atom({ plugin: 'clawd-sidekick', key: 'neighbors' } as const, [])
+const eggAtom = atom({ plugin: 'clawd-sidekick', key: 'egg' } as const, null)
+const birthdayAtom = atom({ plugin: 'clawd-sidekick', key: 'birthday' } as const, '')
+const namesAtom = atom({ plugin: 'clawd-sidekick', key: 'names' } as const, {})
 const seasonPickAtom = atom({ plugin: 'clawd-sidekick', key: 'seasonPick' } as const, 'auto')
 const holidayPickAtom = atom({ plugin: 'clawd-sidekick', key: 'holidayPick' } as const, 'auto')
 
@@ -110,6 +113,7 @@ const PLACE: Record<Pose, { spot: Spot | null; doing: Doing }> = {
   stamp: { spot: null, doing: 'stamp' },
   mail: { spot: null, doing: 'mail' },
   tidy: { spot: 'library', doing: 'tidy' },
+  stretch: { spot: null, doing: 'stretch' },
 }
 
 const str = (value: unknown): string => (typeof value === 'string' ? value : '')
@@ -187,8 +191,12 @@ function timeOfDay(now: number, offset: number): TimeOfDay {
 
 /** Volleyball while Claude works; asleep late at night; otherwise a new game every ninety seconds. */
 function chooseGame(now: number, offset: number): Game {
-  if (isWorking) return 'volley'
   const hour = hourOf(now, offset)
+  const minute = new Date(now + offset * 60_000).getUTCMinutes()
+  // The crew keeps its own day: lunch at noon, tea at three, whatever Claude is up to.
+  if (hour === 12) return 'lunch'
+  if (hour === 15 && minute < 30) return 'tea'
+  if (isWorking) return 'volley'
   if (hour >= 23 || hour < 7) return 'sleep'
   return (['pong', 'rope', 'tower'] as const)[Math.floor(now / 90_000) % 3] ?? 'pong'
 }
@@ -201,6 +209,13 @@ let isWorking = false
 let lastUsageAt = 0
 let lastTurnMs = 0
 let ticks = 0
+/** When the run of work began (turns less than five minutes apart), when the last turn ended, and the last stretch. */
+let busySince = 0
+let lastTurnEndAt = 0
+let lastStretchAt = 0
+const BUSY_GAP = 5 * 60_000
+const BREAK_AFTER = 50 * 60_000
+const STRETCH_EVERY = 10 * 60_000
 /** This session's id, under which it tells the others what it is up to. */
 let sessionId = ''
 let sharedAs = ''
@@ -495,6 +510,40 @@ async function load($: Engine): Promise<void> {
   await update($, deadlinesAtom, () => deadlines)
   await update($, collapsedAtom, () => isCollapsed)
   await update($, petsAtom, () => pets)
+  const names = ((await $.store.get('names')) as Record<string, string> | undefined) ?? {}
+  const birthday = String((await $.store.get('birthday')) ?? '')
+  await update($, namesAtom, () => ({ ...names }))
+  await update($, birthdayAtom, () => birthday)
+  await paintCaps($)
+}
+
+// ── Making the Clawds the person's own ─────────────────────────────────
+
+/** The beanie colours a crew member can wear. */
+const CAP_COLORS = ['blue', 'green', 'purple', 'red', 'yellow', 'teal', 'pink'] as const
+const CREW_IDS = ['c1', 'c2', 'c3'] as const
+
+/** Puts the caps the person chose on the crew. */
+async function paintCaps($: Engine): Promise<void> {
+  const caps = ((await $.store.get('caps')) as Record<string, string> | undefined) ?? {}
+  await update($, actorsAtom, actors => actors.map(a => (caps[a.id] !== undefined && a.neighbor === undefined && a.cap !== null ? { ...a, cap: caps[a.id]! } : a)))
+}
+
+/** Which Clawd a word names: '' or 'main' the main one, 1–3 or a cap colour a crew member. */
+async function whoOf($: Engine, word: string): Promise<string | undefined> {
+  const w = word.toLowerCase()
+  if (w === '' || w === 'main' || w === '主') return 'main'
+  if (/^[123]$/.test(w)) return `c${w}`
+  const actors = await read($, actorsAtom)
+  return actors.find(a => a.cap === w && a.neighbor === undefined && CREW_IDS.includes(a.id as 'c1'))?.id
+}
+
+/** The scene each project last chose, else the one chosen last anywhere. */
+async function sceneFor($: Engine, project: string): Promise<Theme> {
+  const scenes = ((await $.store.get('scenes')) as Record<string, string> | undefined) ?? {}
+  const fallback = String((await $.store.get('theme')) ?? 'house')
+  const theme = scenes[project] ?? fallback
+  return (THEME_ORDER as readonly string[]).includes(theme) ? (theme as Theme) : 'house'
 }
 
 async function changeDeadlines($: Engine, change: (deadlines: Deadline[]) => Deadline[]): Promise<Deadline[]> {
@@ -534,6 +583,11 @@ async function setTheme($: Engine, choice: Theme | 'next'): Promise<Theme> {
   const current = await read($, themeAtom)
   const theme = choice === 'next' ? (THEME_ORDER[(THEME_ORDER.indexOf(current) + 1) % THEME_ORDER.length] ?? 'house') : choice
   await $.store.set('theme', theme)
+  const project = await read($, projectAtom)
+  if (project !== '') {
+    const scenes = ((await $.store.get('scenes')) as Record<string, string> | undefined) ?? {}
+    await $.store.set('scenes', { ...scenes, [project]: theme })
+  }
   await update($, themeAtom, () => theme)
   await changeLife($, life => {
     if (!life.scenes.includes(theme)) life.scenes.push(theme)
@@ -547,6 +601,13 @@ async function checkClock($: Engine): Promise<void> {
   const now = await $.clock.now()
   await update($, nowAtom, () => now)
   await arrangeCrew($)
+  await lookUp($, now)
+  await greetBirthday($, now)
+  if (isWorking && busySince > 0 && now - busySince >= BREAK_AFTER && now - lastStretchAt >= STRETCH_EVERY) {
+    if (lastStretchAt < busySince) $.ui.toast(say(lang).breakToast(Math.floor((now - busySince) / 60_000)), { timeoutMs: 10_000 })
+    lastStretchAt = now
+    await flash($, 'stretch', say(lang).takeBreak, 8000, () => settle($))
+  }
   const deadlines = await read($, deadlinesAtom)
   const due = deadlines.find(d => !d.hasAlarmed && urgency(d.due, now) === 'urgent')
   if (due !== undefined) {
@@ -568,6 +629,35 @@ async function checkClock($: Engine): Promise<void> {
 function answer($: Engine, text: string): { text?: string } {
   $.ui.toast(text, { timeoutMs: 6000 })
   return {}
+}
+
+// ── Rare sights and birthdays ────────────────────────────────────────────
+
+/** Shows the rare sight of the moment, if there is one, says so once, and counts it seen. */
+async function lookUp($: Engine, now: number): Promise<void> {
+  const [offset, theme, current] = await Promise.all([read($, offsetAtom), read($, themeAtom), read($, eggAtom)])
+  const egg: Egg | null = eggOf(now, timeOfDay(now, offset), theme)
+  if (egg === current) return
+  await update($, eggAtom, () => egg)
+  if (egg === null) return
+  const w = say(lang)
+  $.ui.toast(egg === 'star' ? w.eggStar : w.eggCritter[theme], { timeoutMs: 8000 })
+  const seen = egg === 'star' ? 'star' : `critter:${theme}`
+  await changeLife($, life => {
+    if (!life.eggs.includes(seen)) life.eggs.push(seen)
+  })
+}
+
+const monthDay = (now: number, offset: number): string => dateOf(now, offset).slice(5)
+
+/** On the person's birthday, once a day: party hats on, and a word to say so. */
+async function greetBirthday($: Engine, now: number): Promise<void> {
+  const [birthday, offset, names] = await Promise.all([read($, birthdayAtom), read($, offsetAtom), read($, namesAtom)])
+  if (birthday === '' || monthDay(now, offset) !== birthday) return
+  const today = dateOf(now, offset)
+  if ((await $.store.get('birthdayGreeted')) === today) return
+  await $.store.set('birthdayGreeted', today)
+  $.ui.toast(say(lang).birthdayToast(names.main ?? 'Clawd'), { timeoutMs: 10_000 })
 }
 
 // ── Neighbors: the other sessions on this machine ────────────────────────
@@ -616,7 +706,12 @@ function freeSpot(x: number, taken: readonly number[]): number {
   return spots.find(spot => taken.every(t => Math.abs(t - spot) >= 14)) ?? x
 }
 
-const capOf = (id: string): string => VISITOR_CAPS[[...id].reduce((sum, ch) => sum + ch.charCodeAt(0), 0) % VISITOR_CAPS.length] ?? 'red'
+/** A visitor's cap: one of the visitors' colours the crew is not wearing. */
+function capOf(id: string, worn: readonly (string | null)[]): string {
+  const free = VISITOR_CAPS.filter(cap => !worn.includes(cap))
+  const choices = free.length > 0 ? free : VISITOR_CAPS
+  return choices[[...id].reduce((sum, ch) => sum + ch.charCodeAt(0), 0) % choices.length] ?? 'red'
+}
 
 /**
  * Up to two busy neighbors walk in from the right to the room of what they
@@ -639,7 +734,7 @@ async function placeVisitors($: Engine, heard: readonly Neighbor[]): Promise<voi
       taken.push(x)
       const label = clip(`${n.project}・${n.label || words.doings[place.doing]}`, 18)
       const was = current.find(a => a.id === id)
-      visitors.push(was === undefined ? { id, cap: capOf(n.id), fromX: SW + 2, toX: x, departAt: now, doing: place.doing, label, neighbor: n.project } : moveActor(was, x, place.doing, label, now))
+      visitors.push(was === undefined ? { id, cap: capOf(n.id, locals.map(a => a.cap)), fromX: SW + 2, toX: x, departAt: now, doing: place.doing, label, neighbor: n.project } : moveActor(was, x, place.doing, label, now))
     }
     for (const was of current.filter(a => a.neighbor !== undefined && !visitors.some(v => v.id === a.id))) {
       if (was.toX < SW) visitors.push(moveActor(was, SW + 2, 'idle', '', now))
@@ -719,7 +814,7 @@ export const register: Register = (on, options) => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
-    const [doing, deadlines, isCollapsed, actors, usage, game, offset, talk, theme, zone, seasonPick, holidayPick, trophies, neighbors] = await Promise.all([
+    const [doing, deadlines, isCollapsed, actors, usage, game, offset, talk, theme, zone, seasonPick, holidayPick, trophies, neighbors, egg, birthday, names] = await Promise.all([
       read($, activity),
       read($, deadlinesAtom),
       read($, collapsedAtom),
@@ -734,6 +829,9 @@ export const register: Register = (on, options) => {
       read($, holidayPickAtom),
       read($, trophiesAtom),
       read($, neighborsAtom),
+      read($, eggAtom),
+      read($, birthdayAtom),
+      read($, namesAtom),
       read($, nowAtom),
     ])
     const w = say(talk)
@@ -749,7 +847,7 @@ export const register: Register = (on, options) => {
     const langButton = <Button key="lang" label={w.otherLanguage} onPress={() => setLang($, talk === 'zh' ? 'en' : 'zh')} />
     if (isCollapsed || isCramped) {
       const now_ = doing.label && doing.label !== w.sleepy ? doing.label : w.doings[main?.doing ?? 'idle']
-      const summary = [`Clawd · ${now_}`]
+      const summary = [`${names.main ?? 'Clawd'} · ${now_}`]
       if (nearest !== undefined) summary.push(w.due(nearest.title, countdown(nearest.due, now, talk)))
       let face: RenderElement
       if (e.surface === 'terminal') {
@@ -792,6 +890,9 @@ export const register: Register = (on, options) => {
       hat: trophies.hat === 'auto' && (holiday === 'christmas' || holiday === 'halloween') ? null : hatFor(trophies),
       pal: palFor(trophies),
       golden: goldenOf(trophies.unlocked),
+      egg,
+      isBirthday: birthday !== '' && monthDay(now, offset) === birthday,
+      names,
     }
     let house: RenderElement
     if (e.surface === 'terminal') {
@@ -924,13 +1025,14 @@ export const register: Register = (on, options) => {
   // English whatever Clawd speaks, beside Claude Code's own words.
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
     if (e.props.isWorking || e.props.isDraft) return next(e)
-    const [doing, actors, game, today, offset, talk, now] = await Promise.all([
+    const [doing, actors, game, today, offset, talk, names, now] = await Promise.all([
       read($, activity),
       read($, actorsAtom),
       read($, gameAtom),
       read($, todayAtom),
       read($, offsetAtom),
       read($, langAtom),
+      read($, namesAtom),
       read($, nowAtom),
     ])
     const en = say('en')
@@ -948,7 +1050,7 @@ export const register: Register = (on, options) => {
     if (lastTurnMs > 0) details.push(`${en.lastTurn} ${Math.floor(lastTurnMs / 60_000)}:${String(Math.floor((lastTurnMs % 60_000) / 1000)).padStart(2, '0')}`)
     if (today !== null && today.date === dateOf(now || (await $.clock.now()), offset) && today.workMs > 0) details.push(en.todayWorked(duration(today.workMs, 'en')))
     if (e.surface === 'terminal') {
-      return next({ ...e, props: { ...e.props, tail: ` · Clawd · ${[word, ...details].join(' · ')}` } })
+      return next({ ...e, props: { ...e.props, tail: ` · ${names.main ?? 'Clawd'} · ${[word, ...details].join(' · ')}` } })
     }
     if (e.surface !== 'desktop') return next(e)
     const STANDING: readonly Doing[] = ['idle', 'wait', 'read', 'love', 'cheer', 'oops', 'sleep']
@@ -1078,14 +1180,14 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: RECAP }, async ($, e) => {
-    const [talk, theme] = await Promise.all([read($, langAtom), read($, themeAtom), read($, todayAtom)])
+    const [talk, theme, names] = await Promise.all([read($, langAtom), read($, themeAtom), read($, namesAtom), read($, todayAtom)])
     const { today, week, streak } = await readWeek($)
     const w = say(talk)
     const { Box, Text } = $.ui.resolve(e)
     if (e.surface !== 'terminal') {
       const { Svg } = $.ui.resolve(e)
       const width = Math.min(720, Math.max(360, Math.round(e.props.bodyColumns * CELL_PX)))
-      return <Svg source={recapSvg(today, week, streak, talk, theme)} alt={recapLine(today, streak, talk)} width={width} height={Math.round((width * 140) / 240)} />
+      return <Svg source={recapSvg(today, week, streak, talk, theme, names.main)} alt={recapLine(today, streak, talk)} width={width} height={Math.round((width * 140) / 240)} />
     }
     const { Client } = $.ui.resolve(e)
     const favorite = favoriteRoom(today)
@@ -1102,7 +1204,7 @@ export const register: Register = (on, options) => {
     )
     return (
       <Box flexDirection="column" gap={1}>
-        <Text color={ORANGE} bold>{`── ${w.recapTitle} · ${w.recapDate(today.date)} ──`}</Text>
+        <Text color={ORANGE} bold>{`── ${names.main === undefined ? w.recapTitle : w.recapTitleOf(names.main)} · ${w.recapDate(today.date)} ──`}</Text>
         <Box flexDirection="row" gap={2} alignItems="center">
           <Client key="recap-clawd" module="./clawd-client.tsx" props={{ pose: poseOf(today), isNervous: false, scale: 1 }} width={W} height={H / 2} />
           <Box flexDirection="column">
@@ -1171,6 +1273,8 @@ export const register: Register = (on, options) => {
     await load($)
     const root = await $.session.root()
     await update($, projectAtom, () => baseName(root))
+    const theme = await sceneFor($, baseName(root))
+    await update($, themeAtom, () => theme)
     try {
       const zone = await $.process.run(['/bin/date', '+%z'], { timeoutMs: 3000 })
       const offset = parseOffset(zone.stdout)
@@ -1207,6 +1311,52 @@ export const register: Register = (on, options) => {
 
   on('command.run', { command: 'clawd' }, async ($, e) => {
     const [arg = '', choice = ''] = e.args.trim().split(/\s+/)
+    if (arg === 'name') {
+      const words = say(lang)
+      const rest = e.args.trim().slice(arg.length).trim()
+      if (rest === '') return answer($, words.nameUsage)
+      if (rest === 'reset') {
+        await $.store.set('names', {})
+        await update($, namesAtom, () => ({}))
+        return answer($, words.nameReset)
+      }
+      const [first = '', ...others] = rest.split(/\s+/)
+      const crew = others.length > 0 ? await whoOf($, first) : undefined
+      const id = crew !== undefined && crew !== 'main' ? crew : 'main'
+      const name = (crew !== undefined && crew !== 'main' ? others.join(' ') : rest).slice(0, 12)
+      const names = { ...(await read($, namesAtom)), [id]: name }
+      await $.store.set('names', names)
+      await update($, namesAtom, () => names)
+      return answer($, words.nameSet(id === 'main' ? words.mainClawd : words.crewNumber(Number(id.slice(1))), name))
+    }
+    if (arg === 'cap') {
+      const words = say(lang)
+      const [, who = '', color = ''] = e.args.trim().split(/\s+/)
+      const id = await whoOf($, who)
+      const cap = CAP_COLORS.find(c => c === color.toLowerCase() || words.caps[c] === color || say('en').caps[c]?.toLowerCase() === color.toLowerCase())
+      if (id === undefined || id === 'main' || cap === undefined) return answer($, words.capUsage)
+      const caps = { ...(((await $.store.get('caps')) as Record<string, string> | undefined) ?? {}), [id]: cap }
+      await $.store.set('caps', caps)
+      await paintCaps($)
+      return answer($, words.capSet((await read($, namesAtom))[id] ?? words.crewNumber(Number(id.slice(1))), words.caps[cap] ?? cap))
+    }
+    if (arg === 'birthday') {
+      const words = say(lang)
+      if (choice === 'off' || choice === 'none') {
+        await $.store.set('birthday', '')
+        await update($, birthdayAtom, () => '')
+        return answer($, words.birthdayOff)
+      }
+      const m = choice.match(/^(\d{1,2})[/-](\d{1,2})$/)
+      const month = Number(m?.[1])
+      const day = Number(m?.[2])
+      if (m === null || month < 1 || month > 12 || day < 1 || day > 31) return answer($, words.birthdayUsage)
+      const birthday = `${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+      await $.store.set('birthday', birthday)
+      await update($, birthdayAtom, () => birthday)
+      await greetBirthday($, await $.clock.now())
+      return answer($, words.birthdaySet(`${month}/${day}`))
+    }
     if (arg === 'trophies' || arg === 'trophy' || arg === '成就') {
       await $.ui.open({ id: TROPHY_PANE, title: say(lang).trophiesTitle })
       const trophies = await read($, trophiesAtom)
@@ -1323,6 +1473,7 @@ export const register: Register = (on, options) => {
   on('turn.start', async ($, e, next) => {
     isWorking = true
     const started = await $.clock.now()
+    if (busySince === 0 || started - lastTurnEndAt > BUSY_GAP) busySince = started
     await update($, usageAtom, (u): Usage => ({ ...u, turnStartedAt: started, tools: 0, edits: 0, runs: 0 }))
     await act($, 'think', say(lang).thinking)
     await arrangeCrew($)
@@ -1434,6 +1585,7 @@ export const register: Register = (on, options) => {
     if (e.agentId !== undefined) return result
     isWorking = false
     lastTurnMs = e.durationMs
+    lastTurnEndAt = await $.clock.now()
     const ended = await $.clock.now()
     const offset = await read($, offsetAtom)
     const hour = new Date(ended - e.durationMs + offset * 60_000).getUTCHours()

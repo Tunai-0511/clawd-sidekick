@@ -1,8 +1,8 @@
 {
   "name": "clawd-sidekick",
   "displayName": "Clawd Sidekick",
-  "version": "0.13.1",
-  "description": "Clawd's pixel world above your prompt, in four scenes that follow your local time, season and holidays: Clawd walks to the zone of whatever Claude is doing while his crew plays, and acts out what happens: tests, commits, pushes, permission asks, a library that fills with the context. Clawds from your other sessions drop by. A Clawd spinner, 75 trophies with hats and pals to earn, a card of your day to share, live usage figures and a deadline radar. Costs no tokens. English and 繁體中文.",
+  "version": "0.14.0",
+  "description": "Clawd's pixel world above your prompt, in four scenes that follow your local time, season and holidays: Clawd walks to the zone of whatever Claude is doing while his crew plays, and acts out what happens: tests, commits, pushes, permission asks, a library that fills with the context. The crew keeps its own day, rare sights turn up, and Clawds from your other sessions drop by. Name them and make them yours. A Clawd spinner, 78 trophies with hats and pals to earn, a card of your day to share, live usage figures and a deadline radar. Costs no tokens. English and 繁體中文.",
   "author": {
     "name": "Tunai"
   },

@@ -28,6 +28,12 @@ export type ThemeArt = {
    * Every scene must show it, and show it changing; `box` is its hover.
    */
   memory: { box: Box; draw: (g: Grid, level: number) => void }
+  /**
+   * The rare sights: where a shooting star crosses the sky (the window,
+   * indoors), and the scene's own critter, drawn on a clear ground inside
+   * `box` and looping over `ticks`. Every scene must have both.
+   */
+  eggs: { star: Box; critter: { box: Box; ticks: number; draw: (g: Grid, t: number) => void } }
 }
 
 const ROOM_EDGES = [46, 94, 136, 174] as const
@@ -222,6 +228,71 @@ function bookStack(g: Grid, x: number, level: number): void {
     rect(g, x + shift, 24 - i, 5, 1, color)
     px(g, x + shift + 4, 24 - i, C.white)
   }
+}
+
+// ── The rare sights ───────────────────────────────────────────────────────
+
+const WINDOW: Box = { x: 141, y: 6, w: 26, h: 9 }
+
+/** Draws ASCII art like `stamp`, flipped left to right when `isLeft`, and only inside `clip`. */
+function sprite(g: Grid, x: number, y: number, rows: readonly string[], key: Readonly<Record<string, number>>, isLeft = false, clip?: Box): void {
+  rows.forEach((row, j) => {
+    const line = isLeft ? [...row].reverse().join('') : row
+    for (let i = 0; i < line.length; i++) {
+      const c = key[line[i] ?? '.']
+      const px_ = x + i
+      const py = y + j
+      if (c === undefined) continue
+      if (clip !== undefined && (px_ < clip.x || px_ >= clip.x + clip.w || py < clip.y || py >= clip.y + clip.h)) continue
+      px(g, px_, py, c)
+    }
+  })
+}
+
+/** The house: a sparrow hopping along the window sill and back. */
+function sparrow(g: Grid, t: number): void {
+  const k = t % 48
+  const isLeft = k >= 24
+  const x = isLeft ? 160 - Math.floor(((k - 24) * 18) / 24) : 142 + Math.floor((k * 18) / 24)
+  const hop = k % 4 === 0 ? 1 : 0
+  sprite(g, x, 12 - hop, ['...b.', 'bbbbo', '.d.d.'], { b: C.woodLight, o: C.pumpkin, d: C.dark }, isLeft, WINDOW)
+}
+
+/** The beach: a whale's back far out at sea, and its spout. */
+function whale(g: Grid, t: number): void {
+  const k = t % 32
+  if (k < 4 || k >= 26) return
+  rect(g, 133, 15, 9, 1, C.steel)
+  rect(g, 135, 14, 5, 1, C.steel)
+  if (k >= 20) rect(g, 143, 13, 1, 2, C.steel)
+  if (k >= 8 && k < 20) {
+    const h = Math.min(4, k - 7)
+    rect(g, 137, 14 - h, 1, h, C.white)
+    px(g, 136, 13 - h, C.foam)
+    px(g, 138, 13 - h, C.foam)
+  }
+}
+
+/** The space station: a saucer gliding past the observatory window. */
+function saucer(g: Grid, t: number): void {
+  const k = t % 48
+  const x = 134 + Math.floor((k * 34) / 48)
+  const y = 8 + (Math.floor(k / 8) % 2)
+  const lights = k % 4 < 2 ? C.yellow : C.magenta
+  sprite(g, x, y, ['..ccc..', 'mmmmmmm', '.y.y.y.'], { c: C.cyan, m: C.metalLight, y: lights }, false, WINDOW)
+}
+
+/** The forest: a deer looking out from behind a bush, then gone again. */
+function deer(g: Grid, t: number): void {
+  const k = t % 48
+  const offset = k < 12 || k >= 36 ? 6 : k < 16 ? 16 - k + 1 : k >= 32 ? k - 31 : 0
+  if (offset < 6) {
+    const ears = k % 8 === 0 ? ['.a..a.', 'a....a'] : ['a....a', '.a..a.']
+    sprite(g, 142, 13 + offset, [...ears, '.hhhh.', 'hehheh', '.hhhh.', '..nn..'], { a: C.trunk, h: C.woodLight, e: C.eye, n: C.dark })
+  }
+  rect(g, 140, 18, 12, 1, C.pineDark)
+  rect(g, 139, 19, 14, 3, C.pine)
+  for (const x of [141, 145, 149]) px(g, x, 20, C.pineDark)
 }
 
 // ── The house ─────────────────────────────────────────────────────────────
@@ -638,6 +709,7 @@ export const THEMES: Record<Theme, ThemeArt> = {
     sky: { x: 141, y: 6, w: 26, h: 9 },
     signs: { fill: '#F3E3C3', stroke: 'none', y: 2.35 },
     memory: { box: { x: 3, y: 5, w: 41, h: 20 }, draw: houseMemory },
+    eggs: { star: WINDOW, critter: { box: { x: 141, y: 10, w: 26, h: 5 }, ticks: 48, draw: sparrow } },
   },
   beach: {
     draw: beach,
@@ -661,6 +733,7 @@ export const THEMES: Record<Theme, ThemeArt> = {
     sky: { x: 0, y: 0, w: SW, h: 14 },
     signs: { fill: '#FFFFFF', stroke: '#2A1A15', y: 2.6 },
     memory: { box: { x: 37, y: 16, w: 7, h: 9 }, draw: (g, level) => bookStack(g, 37, level) },
+    eggs: { star: { x: 0, y: 0, w: SW, h: 13 }, critter: { box: { x: 131, y: 8, w: 16, h: 9 }, ticks: 32, draw: whale } },
   },
   space: {
     draw: space,
@@ -676,6 +749,7 @@ export const THEMES: Record<Theme, ThemeArt> = {
     sky: null,
     signs: { fill: '#BFF8FF', stroke: 'none', y: 2.35 },
     memory: { box: { x: 3, y: 5, w: 39, h: 20 }, draw: spaceMemory },
+    eggs: { star: WINDOW, critter: { box: WINDOW, ticks: 48, draw: saucer } },
   },
   forest: {
     draw: forest,
@@ -700,6 +774,7 @@ export const THEMES: Record<Theme, ThemeArt> = {
     sky: { x: 0, y: 0, w: SW, h: 13 },
     signs: { fill: '#FFFFFF', stroke: '#2A1A15', y: 2.6 },
     memory: { box: { x: 38, y: 16, w: 7, h: 9 }, draw: (g, level) => bookStack(g, 38, level) },
+    eggs: { star: { x: 0, y: 0, w: SW, h: 12 }, critter: { box: { x: 138, y: 12, w: 16, h: 10 }, ticks: 48, draw: deer } },
   },
 }
 

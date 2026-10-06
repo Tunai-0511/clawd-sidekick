@@ -13,16 +13,18 @@ export type World = {
   opened: string[]
   prompts: string[]
   replies: string[]
+  /** The project folder session.root answers; a test changes it to open another project. */
+  root: string
 }
 
-export type Extra = { zone?: string }
+export type Extra = { zone?: string; now?: number }
 
 export function world(on: On, replies: string[] = [], stored: Readonly<Record<string, unknown>> = {}, system = 'zh-Hant-TW', extra: Extra = {}): World {
-  const w: World = { clock: mock.clock(on, { now: NOW }), played: 0, toasts: [], opened: [], prompts: [], replies }
+  const w: World = { clock: mock.clock(on, { now: extra.now ?? NOW }), played: 0, toasts: [], opened: [], prompts: [], replies, root: '/Users/me/projects/my-app' }
   mock.store(on, stored)
   mock.env(on, { HOME: '/tmp/clawd-test' })
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
-  on('session.root', () => ({ value: '/Users/me/projects/my-app' }))
+  on('session.root', () => ({ value: w.root }))
   on('session.id', () => ({ value: 'this-session' }))
   on('process.run', (_$, e) => {
     const zone = extra.zone === undefined ? '' : `/var/db/timezone/zoneinfo/${extra.zone}\n`
