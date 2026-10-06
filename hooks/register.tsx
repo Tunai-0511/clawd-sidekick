@@ -10,8 +10,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement } from 'claude-code'
 
-import type { Activity, Day, Deadline, Doing, Game, Hat, Holiday, Life, Neighbor, Pal, Pose, RoomId, SceneActor, SceneProps, Season, Theme, Tier, TimeOfDay, Todo, Trophies, Usage } from '../types'
-import { countdown, formatDue, parseDeadline, parseOffset, urgency, URGENCY_COLOR } from './deadline'
+import type { Activity, Day, Deadline, Doing, Game, Hat, Holiday, Life, Neighbor, Pal, Pose, RoomId, SceneActor, SceneProps, Season, Theme, Tier, TimeOfDay, Trophies, Usage } from '../types'
+import { countdown, formatDue, newId, parseDeadline, parseOffset, urgency, URGENCY_COLOR } from './deadline'
 import { langOf, say, type Lang } from './i18n'
 import { actorX, layoutFor, ROOMS, SH, SPOT_X, SW, type Spot } from './scene'
 import { miniClawdSvg, sceneSvg } from './scene-svg'
@@ -37,7 +37,6 @@ import {
   TROPHY_TOTAL,
   type FamilyId,
 } from './trophies'
-import { extractPrompt, isDuplicate, newId, ordered, parseList, shouldExtract } from './todo'
 
 type Engine = EngineInterface
 
@@ -52,7 +51,6 @@ const ORANGE = '#D97757'
 const CELL_PX = 8
 
 const activity = atom({ plugin: 'clawd-sidekick', key: 'activity' } as const, { pose: 'idle', label: '', since: 0 })
-const todosAtom = atom({ plugin: 'clawd-sidekick', key: 'todos' } as const, [])
 const deadlinesAtom = atom({ plugin: 'clawd-sidekick', key: 'deadlines' } as const, [])
 const collapsedAtom = atom({ plugin: 'clawd-sidekick', key: 'isCollapsed' } as const, false)
 const petsAtom = atom({ plugin: 'clawd-sidekick', key: 'pets' } as const, 0)
@@ -197,7 +195,7 @@ function chooseGame(now: number, offset: number): Game {
 
 // Module state: what a reload may forget.
 
-let settings = { isAutoTodo: true, todoModel: 'haiku', language: 'auto' }
+let settings = { language: 'auto' }
 let lang: Lang = 'en'
 let isWorking = false
 let lastUsageAt = 0
@@ -207,6 +205,24 @@ let ticks = 0
 let sessionId = ''
 let sharedAs = ''
 let sharedAt = 0
+/** When each tool call still running began, for its row's clock. */
+const toolStarted = new Map<string, number>()
+
+/** What a running tool's row says it is doing: in English, like the desktop's own rows. */
+const TOOL_WORDS: Readonly<Record<string, string>> = {
+  Bash: 'Running a command',
+  Read: 'Reading a file',
+  Edit: 'Editing a file',
+  MultiEdit: 'Editing a file',
+  Write: 'Writing a file',
+  NotebookEdit: 'Editing a notebook',
+  Grep: 'Searching',
+  Glob: 'Finding files',
+  WebFetch: 'Fetching a page',
+  WebSearch: 'Searching the web',
+  Agent: 'Running a subagent',
+  Task: 'Running a subagent',
+}
 
 // ── Clawd and his crew ──────────────────────────────────────────────────
 
@@ -338,7 +354,6 @@ async function loadLife($: Engine): Promise<Life> {
   }
   const life = lifeFromDays(days)
   life.pets = Number((await $.store.get('pets')) ?? 0)
-  life.todosDone = ((await $.store.get('todos')) as Todo[] | undefined)?.filter(todo => todo.isDone).length ?? 0
   life.scenes = [await read($, themeAtom)]
   await $.store.set('life', life)
   return life
@@ -468,7 +483,6 @@ async function count($: Engine, field: 'tools' | 'edits' | 'runs'): Promise<void
 
 async function load($: Engine): Promise<void> {
   const stored = async <T,>(key: string, fallback: T): Promise<T> => ((await $.store.get(key)) as T | undefined) ?? fallback
-  const todos = await stored<Todo[]>('todos', [])
   const deadlines = await stored<Deadline[]>('deadlines', [])
   const isCollapsed = await stored<boolean>('isCollapsed', false)
   const pets = await stored<number>('pets', 0)
@@ -478,19 +492,9 @@ async function load($: Engine): Promise<void> {
   await update($, seasonPickAtom, () => seasonPick)
   await update($, holidayPickAtom, () => holidayPick)
   await update($, themeAtom, (): Theme => (THEME_ORDER as readonly string[]).includes(theme) ? (theme as Theme) : 'house')
-  await update($, todosAtom, () => todos)
   await update($, deadlinesAtom, () => deadlines)
   await update($, collapsedAtom, () => isCollapsed)
   await update($, petsAtom, () => pets)
-}
-
-/** Changes the todo list from what the store holds now, so another session's adds survive. */
-async function changeTodos($: Engine, change: (todos: Todo[]) => Todo[]): Promise<Todo[]> {
-  const current = ((await $.store.get('todos')) as Todo[] | undefined) ?? (await read($, todosAtom))
-  const next = change(current.map(todo => ({ ...todo })))
-  await $.store.set('todos', next)
-  await update($, todosAtom, () => next)
-  return next
 }
 
 async function changeDeadlines($: Engine, change: (deadlines: Deadline[]) => Deadline[]): Promise<Deadline[]> {
@@ -537,51 +541,6 @@ async function setTheme($: Engine, choice: Theme | 'next'): Promise<Theme> {
   return theme
 }
 
-// ── The human's todo list ───────────────────────────────────────────────
-
-async function addTodos($: Engine, texts: readonly string[], isManual: boolean): Promise<string[]> {
-  const project = await read($, projectAtom)
-  const now = await $.clock.now()
-  const added: string[] = []
-  await changeTodos($, todos => {
-    for (const text of texts) {
-      if (isDuplicate(todos, text)) continue
-      todos.push({ id: newId(now + added.length, text), text, project, createdAt: now, isDone: false, isManual })
-      added.push(text)
-    }
-    return todos
-  })
-  return added
-}
-
-async function completeTodo($: Engine, id: string): Promise<Todo | undefined> {
-  const now = await $.clock.now()
-  let done: Todo | undefined
-  await changeTodos($, todos =>
-    todos.map(todo => {
-      if (todo.id !== id || todo.isDone) return todo
-      done = { ...todo, isDone: true, doneAt: now }
-      return done
-    }),
-  )
-  if (done !== undefined) {
-    await flash($, 'cheer', say(lang).done(clip(done.text, 18)), 2500, () => settle($))
-    await changeLife($, life => {
-      life.todosDone++
-    })
-  }
-  return done
-}
-
-async function extractTodos($: Engine, answer: string): Promise<void> {
-  const reply = await $.model.complete({ model: settings.todoModel, prompt: extractPrompt(answer), maxTokens: 400 })
-  if (!reply.isAnswered) return
-  const added = await addTodos($, parseList(reply.text), false)
-  if (added.length === 0) return
-  $.ui.toast(say(lang).noted(added), { timeoutMs: 6000 })
-  await flash($, 'itemget', say(lang).notedCount(added.length), 4000, () => settle($))
-}
-
 // ── The clock: deadlines, dozing off, the game rotation ─────────────────
 
 async function checkClock($: Engine): Promise<void> {
@@ -600,11 +559,17 @@ async function checkClock($: Engine): Promise<void> {
   const current = await read($, activity)
   if (current.pose === 'wait' && now - current.since > 90_000) await act($, 'idle', '')
   else if (current.pose === 'idle' && now - current.since > 240_000) await act($, 'sleep', say(lang).sleepy)
-  const fresh = (await $.store.get('todos')) as Todo[] | undefined
-  if (fresh !== undefined && JSON.stringify(fresh) !== JSON.stringify(await read($, todosAtom))) await update($, todosAtom, () => fresh)
 }
 
-/** Every five seconds: the turn clock while working, the rest every thirty. */
+/**
+ * A command's answer as a toast rather than a transcript line: a line would
+ * stay in the conversation for the model to read on every later turn.
+ */
+function answer($: Engine, text: string): { text?: string } {
+  $.ui.toast(text, { timeoutMs: 6000 })
+  return {}
+}
+
 // ── Neighbors: the other sessions on this machine ────────────────────────
 
 type Presence = Neighbor & { at: number }
@@ -685,6 +650,7 @@ async function placeVisitors($: Engine, heard: readonly Neighbor[]): Promise<voi
   if (JSON.stringify(next) !== JSON.stringify(current)) await update($, actorsAtom, () => next)
 }
 
+/** Every five seconds: the neighbors, the turn clock while working, the rest every thirty. */
 async function tickClock($: Engine): Promise<void> {
   ticks += 1
   await sharePresence($)
@@ -740,8 +706,6 @@ async function setLang($: Engine, choice: 'zh' | 'en' | 'auto'): Promise<Lang> {
 
 export const register: Register = (on, options) => {
   settings = {
-    isAutoTodo: options.autoTodo !== false,
-    todoModel: typeof options.todoModel === 'string' && options.todoModel !== '' ? options.todoModel : 'haiku',
     language: typeof options.language === 'string' ? options.language : 'auto',
   }
 
@@ -755,12 +719,10 @@ export const register: Register = (on, options) => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
-    const [doing, todos, deadlines, isCollapsed, project, actors, usage, game, offset, talk, theme, zone, seasonPick, holidayPick, trophies, neighbors] = await Promise.all([
+    const [doing, deadlines, isCollapsed, actors, usage, game, offset, talk, theme, zone, seasonPick, holidayPick, trophies, neighbors] = await Promise.all([
       read($, activity),
-      read($, todosAtom),
       read($, deadlinesAtom),
       read($, collapsedAtom),
-      read($, projectAtom),
       read($, actorsAtom),
       read($, usageAtom),
       read($, gameAtom),
@@ -776,7 +738,6 @@ export const register: Register = (on, options) => {
     ])
     const w = say(talk)
     const now = await $.clock.now()
-    const open = ordered(todos, project)
     const ahead = deadlines.filter(d => d.due > now - 86_400_000)
     const nearest = ahead[0]
     const { Box, Text, Button } = $.ui.resolve(e)
@@ -788,7 +749,7 @@ export const register: Register = (on, options) => {
     const langButton = <Button key="lang" label={w.otherLanguage} onPress={() => setLang($, talk === 'zh' ? 'en' : 'zh')} />
     if (isCollapsed || isCramped) {
       const now_ = doing.label && doing.label !== w.sleepy ? doing.label : w.doings[main?.doing ?? 'idle']
-      const summary = [`Clawd · ${now_}`, open.length > 0 ? w.toDo(open.length) : w.noTodos]
+      const summary = [`Clawd · ${now_}`]
       if (nearest !== undefined) summary.push(w.due(nearest.title, countdown(nearest.due, now, talk)))
       let face: RenderElement
       if (e.surface === 'terminal') {
@@ -811,12 +772,12 @@ export const register: Register = (on, options) => {
     const holiday = holidayPick !== 'auto' ? holidayPick : holidayOf(now, offset)
     const scene: SceneProps = {
       actors,
-      todos: open.length,
+      // The board pins every deadline ahead, nearest first; the hour is fine enough.
+      notes: ahead.slice(0, 8).map(d => ({ text: `${d.title} · ${countdown(d.due, now, talk, true)}`, urgency: urgency(d.due, now) })),
       days: nearest === undefined ? null : Math.max(0, Math.floor((nearest.due - now) / 86_400_000)),
       urgency: nearest === undefined ? 'none' : urgency(nearest.due, now),
       game,
       time: timeOfDay(now, offset),
-      board: open.slice(0, 6).map(t => t.text),
       // To the hour only: a minute's change would redraw the desktop house and start its loops over.
       deadline: nearest === undefined ? '' : `${nearest.title} · ${formatDue(nearest.due, offset)} · ${countdown(nearest.due, now, talk, true)}`,
       lang: talk,
@@ -884,15 +845,7 @@ export const register: Register = (on, options) => {
           {stat(w.ran, w.commands(usage.runs))}
         </Box>
         <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
-          {open.length === 0 ? <Text dimColor>{w.nothingToDo}</Text> : null}
-          {open.slice(0, 3).map((todo, i) => (
-            <Box flexDirection="row">
-              <Button key={`done-${todo.id}`} label="□" plain hotkey={String(i + 1)} onPress={() => completeTodo($, todo.id)} />
-              <Text wrap="truncate-end">{` ${clip(todo.text, 16)}`}</Text>
-            </Box>
-          ))}
-          {open.length > 3 ? <Text dimColor>{`+${open.length - 3}`}</Text> : null}
-          {nearest === undefined ? null : (
+          {nearest === undefined ? <Text dimColor>{w.noDeadline}</Text> : (
             <Text color={URGENCY_COLOR[urgency(nearest.due, now)]} wrap="truncate-end">
               {` ${w.due(clip(nearest.title, 10), countdown(nearest.due, now, talk))}`}
             </Text>
@@ -934,6 +887,33 @@ export const register: Register = (on, options) => {
       )
     }
     return next(e)
+  })
+
+  // A tool still running on the desktop: Clawd at his laptop in its row, with
+  // what it is doing, its clock and its command or file. Once it is done the
+  // row is the engine's again, its arrow and its output with it.
+  on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
+    if (e.surface !== 'desktop' || !e.props.isRunning) return next(e)
+    const input = (e.props.input ?? {}) as Record<string, unknown>
+    const detail = str(input.command) || str(input.file_path) || str(input.url) || str(input.query) || str(input.pattern) || str(input.description)
+    const { Box, Svg, Client } = $.ui.resolve(e)
+    return (
+      <Box flexDirection="row" gap={1} alignItems="center">
+        <Svg source={miniClawdSvg('type', true)} alt="Clawd" width={30} height={20} />
+        <Client
+          key={`tool-${e.props.tool_use_id}`}
+          module="./spinner-client.tsx"
+          props={{
+            word: TOOL_WORDS[e.props.tool] ?? `Using ${e.props.tool}`,
+            suffix: '',
+            mode: clip(detail.replace(/\s+/g, ' '), 60),
+            startedAt: toolStarted.get(e.props.tool_use_id) ?? Date.now(),
+            doing: 'type',
+            isTerminal: false,
+          }}
+        />
+      </Box>
+    )
   })
 
   // Between turns, Clawd stands by on the prompt's hint line: what he is up
@@ -987,21 +967,17 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const [doing, todos, deadlines, pets, offset, project, talk] = await Promise.all([
+    const [doing, deadlines, pets, offset, talk] = await Promise.all([
       read($, activity),
-      read($, todosAtom),
       read($, deadlinesAtom),
       read($, petsAtom),
       read($, offsetAtom),
-      read($, projectAtom),
       read($, langAtom),
       read($, nowAtom),
     ])
     const w = say(talk)
     const now = await $.clock.now()
     const { Box, Text, Button } = $.ui.resolve(e)
-    const open = ordered(todos, project)
-    const doneCount = todos.filter(t => t.isDone).length
     const scale = e.props.bodyColumns >= W * 2 + 2 ? 2 : 1
     const nervous = isNervous(deadlines, now)
     let sprite: RenderElement
@@ -1028,21 +1004,6 @@ export const register: Register = (on, options) => {
             <Button key="recap" label={w.recapButton} hotkey="r" onPress={() => $.ui.open({ id: RECAP, title: w.recapPaneTitle })} />
             <Button key="trophies" label={w.trophiesButton} hotkey="t" onPress={() => $.ui.open({ id: TROPHY_PANE, title: w.trophiesTitle })} />
           </Box>
-        </Box>
-
-        <Box flexDirection="column">
-          {heading(w.forYou(open.length))}
-          {open.length === 0 ? <Text dimColor>{w.allDone}</Text> : null}
-          {open.map((todo, i) => (
-            <Box flexDirection="row" gap={1}>
-              <Button key={`pane-done-${todo.id}`} label={w.complete} plain hotkey={i < 9 ? String(i + 1) : undefined} onPress={() => completeTodo($, todo.id)} />
-              <Text wrap="truncate-end">
-                {todo.text}
-                <Text dimColor>{` · ${todo.project || '—'}${todo.isManual ? ` · ${w.manual}` : ''}`}</Text>
-              </Text>
-            </Box>
-          ))}
-          {doneCount > 0 ? <Text dimColor>{w.doneCount(doneCount)}</Text> : null}
         </Box>
 
         <Box flexDirection="column">
@@ -1232,7 +1193,6 @@ export const register: Register = (on, options) => {
     const w = say(lang)
     for (const command of [
       { name: 'clawd', description: w.describeClawd, argumentHint: w.hintClawd },
-      { name: 'todo', description: w.describeTodo, argumentHint: w.hintTodo },
       { name: 'deadline', description: w.describeDeadline, argumentHint: w.hintDeadline },
     ]) {
       await $.command.register(command)
@@ -1242,7 +1202,6 @@ export const register: Register = (on, options) => {
 
   // The menu describes the commands in whatever Clawd speaks now.
   on('command.describe', { command: 'clawd' }, async ($, e) => ({ description: say(lang).describeClawd, argumentHint: say(lang).hintClawd, isHidden: e.isHidden }))
-  on('command.describe', { command: 'todo' }, async ($, e) => ({ description: say(lang).describeTodo, argumentHint: say(lang).hintTodo, isHidden: e.isHidden }))
   on('command.describe', { command: 'deadline' }, async ($, e) => ({ description: say(lang).describeDeadline, argumentHint: say(lang).hintDeadline, isHidden: e.isHidden }))
 
   on('command.run', { command: 'clawd' }, async ($, e) => {
@@ -1250,7 +1209,7 @@ export const register: Register = (on, options) => {
     if (arg === 'trophies' || arg === 'trophy' || arg === '成就') {
       await $.ui.open({ id: TROPHY_PANE, title: say(lang).trophiesTitle })
       const trophies = await read($, trophiesAtom)
-      return { text: say(lang).trophiesCount(Object.keys(trophies.unlocked).length, TROPHY_TOTAL) }
+      return answer($, say(lang).trophiesCount(Object.keys(trophies.unlocked).length, TROPHY_TOTAL))
     }
     if (arg === 'hat' || arg === 'pal') {
       const words = say(lang)
@@ -1258,40 +1217,40 @@ export const register: Register = (on, options) => {
       if (arg === 'hat') {
         const have = hatsOf(trophies.unlocked)
         const pick = pickOf<Hat>(choice, [say('en').hats, say('zh').hats])
-        if (pick === undefined || choice === '') return { text: words.hatUsage(have.length === 0 ? words.noneYet : have.map(h => words.hats[h]).join('、')) }
-        if (pick !== 'auto' && pick !== 'none' && !have.includes(pick)) return { text: words.locked(words.hats[pick]) }
+        if (pick === undefined || choice === '') return answer($, words.hatUsage(have.length === 0 ? words.noneYet : have.map(h => words.hats[h]).join('、')))
+        if (pick !== 'auto' && pick !== 'none' && !have.includes(pick)) return answer($, words.locked(words.hats[pick]))
         const next = await setTrophyPick($, t => ({ ...t, hat: pick }))
         const worn = hatFor(next)
-        return { text: worn === null ? words.hatOff : words.hatSet(words.hats[worn]) }
+        return answer($, worn === null ? words.hatOff : words.hatSet(words.hats[worn]))
       }
       const have = palsOf(trophies.unlocked)
       const pick = pickOf<Pal>(choice, [say('en').pals, say('zh').pals])
-      if (pick === undefined || choice === '') return { text: words.palUsage(have.length === 0 ? words.noneYet : have.map(p => words.pals[p]).join('、')) }
-      if (pick !== 'auto' && pick !== 'none' && !have.includes(pick)) return { text: words.locked(words.pals[pick]) }
+      if (pick === undefined || choice === '') return answer($, words.palUsage(have.length === 0 ? words.noneYet : have.map(p => words.pals[p]).join('、')))
+      if (pick !== 'auto' && pick !== 'none' && !have.includes(pick)) return answer($, words.locked(words.pals[pick]))
       const next = await setTrophyPick($, t => ({ ...t, pal: pick }))
       const walking = palFor(next)
-      return { text: walking === null ? words.palOff : words.palSet(words.pals[walking]) }
+      return answer($, walking === null ? words.palOff : words.palSet(words.pals[walking]))
     }
     if (arg === 'recap') {
       await $.ui.open({ id: RECAP, title: say(lang).recapPaneTitle })
       const { today, streak } = await readWeek($)
-      return { text: recapLine(today, streak, lang) }
+      return answer($, recapLine(today, streak, lang))
     }
     if (arg === 'hide') {
       await setCollapsed($, true)
-      return { text: say(lang).folded }
+      return answer($, say(lang).folded)
     }
     if (arg === 'show') {
       await setCollapsed($, false)
-      return { text: say(lang).unfolded }
+      return answer($, say(lang).unfolded)
     }
     if (arg === 'scene') {
       const wanted = choice.toLowerCase()
       const aliases: Record<string, Theme | 'next'> = { house: 'house', 小屋: 'house', beach: 'beach', 海灘: 'beach', space: 'space', 太空站: 'space', forest: 'forest', camp: 'forest', 森林: 'forest', 森林營地: 'forest', next: 'next', '': 'next' }
       const pick = aliases[wanted]
-      if (pick === undefined) return { text: say(lang).sceneUsage }
+      if (pick === undefined) return answer($, say(lang).sceneUsage)
       const theme = await setTheme($, pick)
-      return { text: say(lang).sceneSet(say(lang).themes[theme]) }
+      return answer($, say(lang).sceneSet(say(lang).themes[theme]))
     }
     if (arg === 'season') {
       const words = say(lang)
@@ -1300,13 +1259,13 @@ export const register: Register = (on, options) => {
       if (pick === 'auto' || pick === '') {
         await $.store.set('seasonPick', 'auto')
         await update($, seasonPickAtom, (): Season | 'auto' => 'auto')
-        return { text: words.seasonAuto(words.seasons[seasonOf(await $.clock.now(), await read($, offsetAtom), await read($, zoneAtom))]) }
+        return answer($, words.seasonAuto(words.seasons[seasonOf(await $.clock.now(), await read($, offsetAtom), await read($, zoneAtom))]))
       }
       const season = seasons.find(one => one === pick || (pick === 'fall' && one === 'autumn'))
-      if (season === undefined) return { text: words.seasonUsage }
+      if (season === undefined) return answer($, words.seasonUsage)
       await $.store.set('seasonPick', season)
       await update($, seasonPickAtom, (): Season | 'auto' => season)
-      return { text: words.seasonSet(words.seasons[season]) }
+      return answer($, words.seasonSet(words.seasons[season]))
     }
     if (arg === 'holiday') {
       const words = say(lang)
@@ -1315,66 +1274,22 @@ export const register: Register = (on, options) => {
       if (pick === 'auto' || pick === '') {
         await $.store.set('holidayPick', 'auto')
         await update($, holidayPickAtom, (): Holiday | 'auto' => 'auto')
-        return { text: words.holidayAuto(words.holidays[holidayOf(await $.clock.now(), await read($, offsetAtom))]) }
+        return answer($, words.holidayAuto(words.holidays[holidayOf(await $.clock.now(), await read($, offsetAtom))]))
       }
       const holiday = names[pick]
-      if (holiday === undefined) return { text: words.holidayUsage }
+      if (holiday === undefined) return answer($, words.holidayUsage)
       await $.store.set('holidayPick', holiday)
       await update($, holidayPickAtom, (): Holiday | 'auto' => holiday)
-      return { text: words.holidaySet(words.holidays[holiday]) }
+      return answer($, words.holidaySet(words.holidays[holiday]))
     }
     if (arg === 'lang') {
       const wanted = choice.toLowerCase()
       const pick = wanted.startsWith('zh') || wanted === '中文' ? 'zh' : wanted === 'en' || wanted === 'english' ? 'en' : wanted === 'auto' ? 'auto' : undefined
-      if (pick === undefined) return { text: say(lang).langUsage }
-      return { text: say(await setLang($, pick)).speaks }
+      if (pick === undefined) return answer($, say(lang).langUsage)
+      return answer($, say(await setLang($, pick)).speaks)
     }
     await $.ui.open({ id: PANE, title: say(lang).paneTitle })
-    return { text: say(lang).paneOpened }
-  })
-
-  on('command.run', { command: 'todo' }, async ($, e) => {
-    const w = say(lang)
-    const [verb = '', ...rest] = e.args.trim().split(/\s+/)
-    const text = rest.join(' ').trim()
-    const project = await read($, projectAtom)
-    const open = ordered(await read($, todosAtom), project)
-    const pick = (): Todo | undefined => open[Number(text) - 1]
-    switch (verb) {
-      case 'add': {
-        if (text === '') return { text: w.todoUsage }
-        const added = await addTodos($, [text], true)
-        return { text: added.length > 0 ? w.todoAdded(text) : w.todoDuplicate }
-      }
-      case 'done': {
-        const todo = pick()
-        if (todo === undefined) return { text: w.noSuchTodo(text) }
-        await completeTodo($, todo.id)
-        return { text: w.done(todo.text) }
-      }
-      case 'undo': {
-        const all = await read($, todosAtom)
-        const last = all.filter(t => t.isDone).sort((a, b) => (b.doneAt ?? 0) - (a.doneAt ?? 0))[0]
-        if (last === undefined) return { text: w.nothingToUndo }
-        await changeTodos($, list => list.map(t => (t.id === last.id ? { ...t, isDone: false } : t)))
-        return { text: w.undone(last.text) }
-      }
-      case 'rm': {
-        const todo = pick()
-        if (todo === undefined) return { text: w.noSuchTodo(text) }
-        await changeTodos($, list => list.filter(t => t.id !== todo.id))
-        return { text: w.removed(todo.text) }
-      }
-      case 'clear': {
-        const next = await changeTodos($, list => list.filter(t => !t.isDone))
-        return { text: w.cleared(next.length) }
-      }
-      default: {
-        if (open.length === 0) return { text: w.emptyList }
-        const lines = open.map((t, i) => `${i + 1}. ${t.text}${t.project && t.project !== project ? `（${t.project}）` : ''}`)
-        return { text: [w.listHeader, ...lines, '', w.listFooter].join('\n') }
-      }
-    }
+    return {}
   })
 
   on('command.run', { command: 'deadline' }, async ($, e) => {
@@ -1384,22 +1299,22 @@ export const register: Register = (on, options) => {
     const offset = await read($, offsetAtom)
     if (args.startsWith('add')) {
       const parsed = parseDeadline(args.slice(3), now, offset, lang)
-      if ('error' in parsed) return { text: parsed.error }
+      if ('error' in parsed) return answer($, parsed.error)
       const project = await read($, projectAtom)
       const id = newId(now, parsed.title)
       await changeDeadlines($, list => [...list, { id, title: parsed.title, due: parsed.due, project, hasAlarmed: false }])
-      return { text: w.deadlineAdded(parsed.title, formatDue(parsed.due, offset), countdown(parsed.due, now, lang)) }
+      return answer($, w.deadlineAdded(parsed.title, formatDue(parsed.due, offset), countdown(parsed.due, now, lang)))
     }
     const deadlines = await read($, deadlinesAtom)
     if (args.startsWith('rm')) {
       const target = deadlines[Number(args.slice(2).trim()) - 1]
-      if (target === undefined) return { text: w.noSuchDeadline }
+      if (target === undefined) return answer($, w.noSuchDeadline)
       await changeDeadlines($, list => list.filter(d => d.id !== target.id))
-      return { text: w.removed(target.title) }
+      return answer($, w.removed(target.title))
     }
-    if (deadlines.length === 0) return { text: `${w.noDeadlines} ${w.usage}` }
-    const lines = deadlines.map((d, i) => `${i + 1}. ${d.title} · ${formatDue(d.due, offset)} · ${countdown(d.due, now, lang)}`)
-    return { text: [w.deadlineHeader, ...lines, '', w.deadlineFooter].join('\n') }
+    // The list is the pane's: nothing of it goes into the conversation.
+    await $.ui.open({ id: PANE, title: w.paneTitle })
+    return deadlines.length === 0 ? answer($, `${w.noDeadlines} ${w.usage}`) : {}
   })
 
   // ── What the agent does ─────────────────────────────────────────────────
@@ -1432,7 +1347,8 @@ export const register: Register = (on, options) => {
     } catch {
       // Clawd missing a beat never holds up the tool.
     }
-    const ran = await next(e)
+    toolStarted.set(e.tool_use_id, Date.now())
+    const ran = await next(e).finally(() => toolStarted.delete(e.tool_use_id))
     try {
       const isFailed = ran.deny === undefined && ran.isError === true
       if (isDispatch) await releaseCrew($, e.tool_use_id)
@@ -1548,10 +1464,6 @@ export const register: Register = (on, options) => {
     }
     await act($, 'wait', say(lang).yourTurn)
     await sharePresence($)
-    if (settings.isAutoTodo && shouldExtract(e.answer)) {
-      const answer = e.answer
-      $.clock.after(50, () => void extractTodos($, answer))
-    }
     return result
   })
 }

@@ -1,6 +1,6 @@
 # Clawd Sidekick
 
-**A pixel house for Clawd above your Claude Code prompt.** Clawd walks to the room of whatever Claude is doing, while his crew plays in the game room. Under the house you get the figures you'd normally check the status line for, and a list of things Claude handed **you** to do.
+**A pixel house for Clawd above your Claude Code prompt.** Clawd walks to the room of whatever Claude is doing, while his crew plays in the game room. Under the house you get the figures you'd normally check the status line for. **It costs you no tokens**: Clawd never calls a model and puts nothing into your conversation.
 
 [繁體中文說明](./README.zh-TW.md)
 
@@ -13,7 +13,7 @@
 | Room | Clawd goes there when Claude… |
 | --- | --- |
 | Library | reads or searches files |
-| Workshop | edits files or thinks; your to-dos and the next deadline hang on the wall |
+| Workshop | edits files or thinks; your deadlines hang on the board and the calendar |
 | Server room | runs a command |
 | Lookout | searches or fetches the web (the window follows your local time: day, dusk, starry night) |
 | Game room | is idle: the crew lives here |
@@ -48,7 +48,7 @@
 
 **Neighbors.** Running Claude Code in more than one terminal or window? The other sessions' Clawds come to visit. Up to two busy neighbors walk in from the right to the room of whatever their Claude is doing, in caps of their own and with their project on their bubble, and walk back out when they stop or their session ends. The band lists the sessions next door. They talk through the plugin's own store on your machine; nothing leaves it.
 
-**Trophies.** 79 goals in 21 families, most in four tiers, from a first commit to a hundred days in a row, a million tool calls or a three-hour turn. Every family you reach hangs a medal under the game room's bunting. Some bring the main Clawd a hat (a party hat, a crown, a halo, a wizard hat…), a pal who walks the floor (a cat, an owl, a little crab), or a golden stamp and seal for your commits and pushes. `/clawd trophies` shows where you stand on each; `/clawd hat` and `/clawd pal` choose what he wears and who walks with him. The days you already worked count from the start.
+**Trophies.** 75 goals in 20 families, most in four tiers, from a first commit to a hundred days in a row, a million tool calls or a three-hour turn. Every family you reach hangs a medal under the game room's bunting. Some bring the main Clawd a hat (a party hat, a crown, a halo, a wizard hat…), a pal who walks the floor (a cat, an owl, a little crab), or a golden stamp and seal for your commits and pushes. `/clawd trophies` shows where you stand on each; `/clawd hat` and `/clawd pal` choose what he wears and who walks with him. The days you already worked count from the start.
 
 ![The medals under the bunting, a crowned Clawd and his cat, in all four scenes](./docs/trophies.png)
 
@@ -77,7 +77,6 @@
 | Globetrotter | Scenes lived in | — | 4 + explorer's hat | — | — |
 | Holiday shift | Holidays worked through (Lunar New Year, Halloween, Christmas) | 1 | 2 | 3 | — |
 | Comeback | Passing after three or more failures in a row | 1 | 10 | 50 | — |
-| Your half | To-dos you ticked off | 10 | 100 | 500 | 2,000 |
 
 </details>
 
@@ -88,11 +87,11 @@
 
 ![Spring blossoms in the forest camp, its autumn reds and golds, Halloween pumpkins on the beach at dusk, Christmas night in the house with scarves and a Santa hat](./docs/seasons.png)
 
-**Hover everything.** In the Desktop app, a Clawd under the pointer hops and shows hearts, and his tooltip says what he's doing. The board lists your to-dos and the calendar names the deadline. Each scene's light switches on, and its toy says hi: the arcade, a crab peeking out of the sandcastle, or sparks from the campfire. In the terminal, the line under the house tells you what's under the pointer, and a click pets that Clawd.
+**Hover everything.** In the Desktop app, a Clawd under the pointer hops and shows hearts, and his tooltip says what he's doing. The board lists your deadlines and the calendar names the nearest. Each scene's light switches on, and its toy says hi: the arcade, a crab peeking out of the sandcastle, or sparks from the campfire. In the terminal, the line under the house tells you what's under the pointer, and a click pets that Clawd.
 
 With reduced motion turned on in your system settings, the Desktop scene holds still: no loops, no drifting clouds or leaves.
 
-**A Clawd spinner.** The `Thinking…` line becomes a small Clawd who thinks in dots, then sits down at a laptop and types away while Claude works, beside a clock that counts every second. Between turns he stands by on the hint line under the prompt: waving when it's your turn, asleep late at night, with how long the last turn took and today's total. These two lines stay in English in either language, beside Claude Code's own words.
+**A Clawd spinner.** The `Thinking…` line becomes a small Clawd who thinks in dots, then sits down at a laptop and types away while Claude works, beside a clock that counts every second. In the Desktop app, a tool's row in the conversation shows him at the laptop too while the tool runs. Between turns he stands by on the hint line under the prompt: waving when it's your turn, asleep late at night, with how long the last turn took and today's total. These two lines stay in English in either language, beside Claude Code's own words.
 
 **Clawd's day.** `/clawd recap` (or **Today** in the `/clawd` pane) shows a card of the day so far: how long Clawd worked alongside Claude, turns, tool calls, files edited, commands, tests passed, commits, pushes and tidy-ups, where the day went room by room, the week, and your streak of days in a row. It counts every session and project on the machine, and it's made to be screenshotted and shared.
 
@@ -100,9 +99,7 @@ With reduced motion turned on in your system settings, the Desktop scene holds s
 
 **Live figures** under the house: model, context fill, 5-hour and 7-day plan usage, session cost, the turn timer, and this turn's tool calls, edits and commands. Each turns yellow past 50% and red past 80%.
 
-**The human's half.** When a reply hands you something only you can do, such as creating an API key, uploading a file or signing up for something, a small model notes it on the board. The list carries across sessions and projects. You tick items off with □ (or the keys 1–3), or use `/todo`.
-
-**Deadline radar.** `/deadline add 12/24 Launch` puts a countdown on the band and the wall calendar. With under 3 days left Clawd sweats; under 24 hours the calendar flashes red and he panics.
+**Deadline radar.** `/deadline add 12/24 Launch` puts a countdown on the band and the wall calendar, and pins a note on the board, coloured by how near it is. With under 3 days left Clawd sweats; under 24 hours the calendar flashes red and he panics.
 
 **English and 繁體中文.** It follows your system language. Switch any time with the button on the band or `/clawd lang en|zh|auto`.
 
@@ -131,7 +128,7 @@ Third-party marketplaces don't auto-update by default, and a marketplace can't s
 
 | Command | What it does |
 | --- | --- |
-| `/clawd` | Open the Clawd Sidekick pane: big Clawd, your full to-do list, all deadlines |
+| `/clawd` | Open the Clawd Sidekick pane: big Clawd, all your deadlines, Today and Trophies |
 | `/clawd recap` | Today's card: time worked, the figures, the rooms, the week and your streak |
 | `/clawd trophies` | Every trophy family: your tier, your progress, what the next tier brings |
 | `/clawd hat <name>` · `auto` · `none` | Put on a hat you've earned (`auto`: the finest) |
@@ -141,7 +138,6 @@ Third-party marketplaces don't auto-update by default, and a marketplace can't s
 | `/clawd holiday christmas` · `lunar` · `halloween` · `none` · `auto` | Set the decorations by hand, or follow the date |
 | `/clawd hide` · `/clawd show` | Fold the band to one line, or unfold it |
 | `/clawd lang en` · `zh` · `auto` | Switch language (`auto` follows the system) |
-| `/todo` | List your to-dos; also `add <text>`, `done N`, `undo`, `rm N`, `clear` |
 | `/deadline` | List deadlines; also `add 12/24 Name`, `add 2027-03-01 09:00 Name`, `add tomorrow Name`, `rm N` |
 
 ## Settings
@@ -150,17 +146,15 @@ These are in `/config`, under the plugin:
 
 | Setting | Default | |
 | --- | --- | --- |
-| `autoTodo` | `true` | Note the to-dos Claude hands you |
-| `todoModel` | `haiku` | Model that reads a reply for to-dos |
 | `language` | `auto` | `auto`, `en` or `zh-TW` |
 
 ## What it does on your machine
 
 A mod runs with your permissions, so here is everything this one reaches (`claude plugin validate .` lists the same):
 
-- **Model calls**: only after a turn whose reply looks like it hands you something ("you'll need to…", "please upload…"), one short call to `todoModel`. Nothing else calls a model.
+- **Model calls and tokens: none.** Clawd never calls a model, never adds to the system prompt or to a tool's result, and its commands answer in a toast rather than in the conversation, so nothing it says is read by the model. Running a `/clawd` or `/deadline` command leaves only its own one-line record, as any slash command does.
 - **Processes**: `date +%z` and `readlink /etc/localtime` once at start, for your time zone and which way the seasons run; `defaults read -g AppleLanguages` once, on macOS, when the language is `auto` and no `LANG` is set.
-- **Storage**: your to-dos, deadlines, scene, language, pet count, each day's figures for the recap, the running totals for the trophies, and each open session's word to its neighbors (its project and what it's doing, removed when it ends), in the plugin's own store on your machine.
+- **Storage**: your deadlines, scene, language, pet count, each day's figures for the recap, the running totals for the trophies, and each open session's word to its neighbors (its project and what it's doing, removed when it ends), in the plugin's own store on your machine.
 - **Environment**: reads `LANG`, `LC_ALL`, `LC_MESSAGES` and `TZ`.
 - **Network: none.**
 

@@ -12,7 +12,6 @@ import { sceneSvg } from '../hooks/scene-svg'
 import { holidayOf, isSouthern, seasonOf, zoneOf } from '../hooks/seasons'
 import { CYCLE, frame, H, POSES, W } from '../hooks/sprite'
 import { THEME_ORDER, THEMES } from '../hooks/themes'
-import { isDuplicate, parseList, shouldExtract } from '../hooks/todo'
 import { BAND, NOW, SURFACES, world } from './world'
 
 const TAIPEI = 480
@@ -31,19 +30,21 @@ const crewIn = (game: Game): SceneActor[] =>
 
 const sceneOf = (game: Game, time: TimeOfDay = 'day', lang: 'zh' | 'en' = 'zh', theme: Theme = 'house', season: Season = 'autumn'): SceneProps => ({
   actors: [{ id: 'main', cap: null, fromX: SPOT_X.library, toX: SPOT_X.code, departAt: NOW - 500, doing: 'code', label: '改 register.tsx' }, ...crewIn(game)],
-  todos: 2,
+  notes: [
+    { text: 'Launch · 剩 5 天', urgency: 'near' },
+    { text: '季報 · 剩 9 天', urgency: 'far' },
+  ],
   days: 5,
   urgency: 'near',
   game,
   time,
-  board: ['更新設定裡的密鑰', '上傳簡報'],
   deadline: 'Launch · 12/24 23:59 · 剩 5 天',
   lang,
   theme,
   memory: 5,
   isTired: false,
   medals: [],
-  trophyCount: [0, 79],
+  trophyCount: [0, 75],
   hat: null,
   pal: null,
   golden: { stamp: false, seal: false },
@@ -78,16 +79,6 @@ describe('the pure parts', () => {
     expect(urgency(NOW + 2 * DAY, NOW)).toBe('near')
   })
 
-  test('only replies that hand something over go to the model', async () => {
-    expect(shouldExtract('我把 register.tsx 的 bug 修好了，測試全過。')).toBe(false)
-    expect(shouldExtract('程式寫好了。接下來請你到設定頁更新密鑰。')).toBe(true)
-    expect(parseList('好的：["更新設定裡的密鑰", "上傳簡報", 3]')).toEqual(['更新設定裡的密鑰', '上傳簡報'])
-    expect(parseList('none')).toEqual([])
-    const open = [{ id: 'a', text: '更新設定裡的密鑰', project: 'x', createdAt: 0, isDone: false, isManual: false }]
-    expect(isDuplicate(open, '更新設定裡的密鑰')).toBe(true)
-    expect(isDuplicate(open, '上傳影片')).toBe(false)
-  })
-
   test('every pose of the big Clawd stays on his canvas', async () => {
     for (const pose of POSES) {
       for (let t = 0; t < CYCLE[pose]; t++) {
@@ -112,7 +103,7 @@ describe('the pure parts', () => {
     expect(hitTest(s, later, SPOT_X.code + 8, 20)).toEqual({ kind: 'actor', id: 'main' })
     expect(tipOf(s, { kind: 'actor', id: 'main' })).toContain('改 register.tsx')
     expect(tipOf(s, { kind: 'actor', id: 'c1' })).toContain('在打電動')
-    expect(tipOf(s, hitTest(s, later, 52, 8)!)).toContain('更新設定裡的密鑰')
+    expect(tipOf(s, hitTest(s, later, 52, 8)!)).toContain('季報')
     expect(tipOf(s, hitTest(s, later, 70, 8)!)).toContain('剩 5 天')
     expect(hitTest(s, later, 100, 6)).toEqual({ kind: 'room', id: 'terminal' })
     const english = sceneOf('pong', 'day', 'en')
@@ -128,12 +119,12 @@ describe('the pure parts', () => {
         expect(svg.length).toBeLessThan(131072)
         expect(svg).toContain('color-scheme:light dark')
         expect(svg).toContain('.clawd:hover')
-        expect(svg).toContain('□ 更新設定裡的密鑰')
+        expect(svg).toContain('· 季報 · 剩 9 天')
       }
     }
     const english = sceneSvg(sceneOf('volley', 'day', 'en'), NOW)
     expect(english).toContain('Game room')
-    expect(english).toContain('Board: for you to do')
+    expect(english).toContain('Board: deadlines')
     expect(english).not.toContain('遊戲間')
     expect(sceneSvg(sceneOf('volley', 'night', 'zh', 'beach'), NOW)).toContain('沙灘球場')
     expect(sceneSvg(sceneOf('pong', 'day', 'en', 'forest'), NOW)).toContain('Campfire')
@@ -248,8 +239,8 @@ describe('trophies', () => {
     return { ...s, actors: s.actors.map(a => (a.cap === null ? { ...a, fromX: SPOT_X.code, toX: SPOT_X.code, departAt: 0, doing: 'code' as const, label: '改 app.ts' } : a)) }
   }
 
-  test('79 goals in rising tiers, from a first commit to a hundred days in a row', async () => {
-    expect(TROPHY_TOTAL).toBe(79)
+  test('75 goals in rising tiers, from a first commit to a hundred days in a row', async () => {
+    expect(TROPHY_TOTAL).toBe(75)
     for (const family of FAMILIES) {
       const targets = family.tiers.map(t => t.target)
       expect([...targets].sort((a, b) => a - b)).toEqual(targets)
@@ -311,8 +302,12 @@ describe('trophies', () => {
     await $.turn.start({ text: '開工', turnId: 't1' })
     await $.turn.complete({ turnId: 't1', reason: 'answer', answer: '好', durationMs: 60_000 } as never)
     expect(w.toasts.some(t => t.includes('連續開工・銅'))).toBe(true)
-    const run = (args: string) => $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
-    expect((await run('trophies')).text).toContain('已解鎖 1 / 79')
+    const run = async (args: string) => {
+      const ran = await $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+      expect(ran.text).toBeUndefined()
+      return { text: w.toasts.at(-1) ?? '' }
+    }
+    expect((await run('trophies')).text).toContain('已解鎖 1 / 75')
     expect((await run('hat crown')).text).toContain('還沒解鎖王冠')
     const pane = await $.ui.mount({ plugin: 'clawd-sidekick', surface: 'terminal', component: 'Pane', requestId: 'clawd-trophies', props: { title: '成就', isFocused: true, bodyColumns: 100, placement: 'dock' } } as never)
     expect(await pane.find({ text: /連續開工/ })).toBeDefined()
@@ -320,9 +315,13 @@ describe('trophies', () => {
   })
 
   test('a hat earned can be worn, swapped and taken off', async ($, on) => {
-    world(on, [], { trophies: { unlocked: { 'streak:silver': 1, 'streak:gold': 2, 'scenes:silver': 3 }, hat: 'auto', pal: 'auto' } })
+    const w = world(on, [], { trophies: { unlocked: { 'streak:silver': 1, 'streak:gold': 2, 'scenes:silver': 3 }, hat: 'auto', pal: 'auto' } })
     await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
-    const run = (args: string) => $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    const run = async (args: string) => {
+      const ran = await $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+      expect(ran.text).toBeUndefined()
+      return { text: w.toasts.at(-1) ?? '' }
+    }
     expect((await run('hat')).text).toContain('王冠')
     expect((await run('hat 探險帽')).text).toContain('戴上了探險帽')
     expect((await run('hat none')).text).toContain('拿下來')
@@ -386,7 +385,7 @@ describe("Clawd's day", () => {
   })
 
   test('/clawd recap sums up today across sessions, with yesterday in the streak', async ($, on) => {
-    world(on, [], { 'day:2026-10-05': { ...emptyDay('2026-10-05'), turns: 2, tools: 9 } })
+    const w = world(on, [], { 'day:2026-10-05': { ...emptyDay('2026-10-05'), turns: 2, tools: 9 } })
     on('tool.call', async (_$, e) => {
       const command = String((e as unknown as { command?: string }).command ?? '')
       const git = command.startsWith('git commit') ? { gitOperation: { commit: { sha: 'abc1234', kind: 'committed' } } } : {}
@@ -397,7 +396,11 @@ describe("Clawd's day", () => {
     await $.tool.call({ tool: 'Bash', command: 'npm test' } as never)
     await $.tool.call({ tool: 'Bash', command: 'git commit -m "fix"' } as never)
     await $.turn.complete({ turnId: 't1', reason: 'answer', answer: '好了', durationMs: 5 * 60_000 } as never)
-    const run = (args: string) => $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    const run = async (args: string) => {
+      const ran = await $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+      expect(ran.text).toBeUndefined()
+      return { text: w.toasts.at(-1) ?? '' }
+    }
     const said = (await run('recap')).text ?? ''
     expect(said).toContain('1 個回合')
     expect(said).toContain('測試 1 過 0 沒過')
@@ -425,12 +428,15 @@ describe('the band above the prompt', () => {
   })
 
   test('the house draws as a Client on the terminal and an interactive SVG on the desktop', async ($, on) => {
-    world(on)
+    const w = world(on)
     await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    // The usage figures load in the background once the session starts.
+    await w.clock.settle()
     for (const surface of SURFACES) {
       const ui = await $.ui.mount({ ...BAND, surface })
       expect(await ui.find({ text: /我是 Clawd/ })).toBeDefined()
-      expect(await ui.find({ text: '沒有要你做的事 ✓' })).toBeDefined()
+      expect(await ui.find({ text: /沒有截止日/ })).toBeDefined()
+      expect((await ui.find({ key: 'panel' }))?.props.label).toBe('面板')
       expect(await ui.find({ text: 'Opus 5.5' })).toBeDefined()
       expect(await ui.find({ text: /▰▰▱▱▱ 42%/ })).toBeDefined()
       expect(await ui.find({ text: '1.84' })).toBeDefined()
@@ -529,41 +535,31 @@ describe('the band above the prompt', () => {
     expect(await sourceNow()).not.toContain('探索 hooks')
   })
 
-  test('a reply that hands you work becomes a todo you can tick off', async ($, on) => {
-    const w = world(on, ['["更新設定裡的密鑰"]'])
+  test('Clawd never calls a model and writes nothing into the conversation', async ($, on) => {
+    const w = world(on)
     await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
     await $.turn.start({ text: '幫我改登入頁', turnId: 't1' })
-    await $.turn.complete({
-      answer: '串接寫好了。接下來請你到設定頁更新密鑰。',
-      durationMs: 1000,
-      isAborted: false,
-      turnId: 't1',
-      reason: 'answer',
-    })
-    await w.clock.advance(100)
-    expect(w.toasts.join()).toContain('更新設定裡的密鑰')
-    for (const surface of SURFACES) {
-      const ui = await $.ui.mount({ ...BAND, surface })
-      const box = await ui.find({ type: 'Button', text: '□' })
-      expect(box).toBeDefined()
-      expect(await ui.find({ text: /更新設定裡的密鑰/ })).toBeDefined()
-      if (surface === 'desktop') {
-        expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toContain('□ 更新設定裡的密鑰')
-        await ui.press({ key: box?.key ?? '' })
-        expect(await ui.find({ text: '沒有要你做的事 ✓' })).toBeDefined()
-      }
-      await ui.unmount()
+    await $.turn.complete({ answer: '串接寫好了。接下來請你到設定頁更新密鑰。', durationMs: 1000, isAborted: false, turnId: 't1', reason: 'answer' })
+    await w.clock.advance(60_000)
+    const answers = []
+    for (const [command, args] of [['clawd', ''], ['clawd', 'recap'], ['clawd', 'trophies'], ['clawd', 'hat'], ['clawd', 'scene beach'], ['clawd', 'lang en'], ['clawd', 'season auto'], ['deadline', 'add 12/24 Demo'], ['deadline', ''], ['deadline', 'rm 1']] as const) {
+      answers.push(await $.command.run({ command, args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } }))
     }
+    expect(w.prompts).toHaveLength(0)
+    expect(answers.every(a => a.text === undefined && a.context === undefined)).toBe(true)
+    expect(w.toasts.length).toBeGreaterThan(5)
   })
 
-  test('a deadline shows its countdown on the band and the calendar', async ($, on) => {
-    world(on)
+  test('a deadline shows its countdown on the band, the board and the calendar', async ($, on) => {
+    const w = world(on)
     await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
     const added = await $.command.run({ command: 'deadline', args: 'add 12/24 Launch', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
-    expect(added.text).toContain('剩 5 天')
+    expect(added.text).toBeUndefined()
+    expect(w.toasts.at(-1)).toContain('剩 5 天')
     const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
     expect(await band.find({ text: /Launch 剩 5 天/ })).toBeDefined()
     expect(String((await band.find({ type: 'Svg' }))?.props.source)).toContain('日曆：Launch')
+    expect(String((await band.find({ type: 'Svg' }))?.props.source)).toContain('布告欄：截止日')
   })
 
   test('on the terminal the pointer names what it is over, and a click pets that Clawd', async ($, on) => {
@@ -581,19 +577,20 @@ describe('the band above the prompt', () => {
   })
 
   test('English when the person asks for it, and /clawd lang switches on the spot', { options: { language: 'en' } }, async ($, on) => {
-    world(on)
+    const w = world(on)
     await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
-    expect(await ui.find({ text: 'Nothing for you to do ✓' })).toBeDefined()
+    expect(await ui.find({ text: 'no deadlines' })).toBeDefined()
     expect(await ui.find({ text: /1 command|0 commands/ })).toBeDefined()
     expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toContain('Game room')
     await ui.unmount()
     const switched = await $.command.run({ command: 'clawd', args: 'lang zh', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
-    expect(switched.text).toBe('Clawd 改說中文了。')
+    expect(switched.text).toBeUndefined()
+    expect(w.toasts.at(-1)).toBe('Clawd 改說中文了。')
     const again = await $.ui.mount({ ...BAND, surface: 'desktop' })
-    expect(await again.find({ text: '沒有要你做的事 ✓' })).toBeDefined()
+    expect(await again.find({ text: '沒有截止日' })).toBeDefined()
     await again.press({ key: 'lang' })
-    expect(await again.find({ text: 'Nothing for you to do ✓' })).toBeDefined()
+    expect(await again.find({ text: 'no deadlines' })).toBeDefined()
   })
 
   test('auto follows the system, except for someone who met Clawd before he spoke English', async ($, on) => {
@@ -611,7 +608,7 @@ describe('the band above the prompt', () => {
   })
 
   test('the scene button moves the Clawds from the house to the beach, space and the forest', async ($, on) => {
-    world(on)
+    const w = world(on)
     await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const source = async (): Promise<string> => String((await ui.find({ type: 'Svg' }))?.props.source)
@@ -620,7 +617,8 @@ describe('the band above the prompt', () => {
     expect(await source()).toContain('沙灘球場')
     expect(await ui.find({ type: 'Button', text: '場景：海灘' })).toBeDefined()
     const moved = await $.command.run({ command: 'clawd', args: 'scene forest', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
-    expect(moved.text).toBe('Clawd 們搬到森林營地了。')
+    expect(moved.text).toBeUndefined()
+    expect(w.toasts.at(-1)).toBe('Clawd 們搬到森林營地了。')
     expect(await source()).toContain('營火空地')
   })
 
@@ -630,9 +628,33 @@ describe('the band above the prompt', () => {
     const narrow = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns: 50 }, surface: 'desktop' })
     expect(String((await narrow.find({ type: 'Svg' }))?.props.source)).toContain('遊戲間')
     await narrow.press({ key: 'hide' })
-    expect(await narrow.find({ text: /Clawd · .* · 沒有待辦/ })).toBeDefined()
+    expect(await narrow.find({ text: /^Clawd · / })).toBeDefined()
     await narrow.press({ key: 'expand' })
     expect(String((await narrow.find({ type: 'Svg' }))?.props.source)).toContain('遊戲間')
+  })
+
+  test("a running tool's row on the desktop is Clawd at his laptop; done, or on the terminal, it is the engine's", async ($, on) => {
+    world(on)
+    on('ui.render', { component: 'ToolUse' }, async ($, e) => {
+      const { Text } = $.ui.resolve(e)
+      return h(Text, {}, `engine row: ${e.props.tool}`) as RenderElement
+    })
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    const row = (surface: 'terminal' | 'desktop', isRunning: boolean) =>
+      $.ui.mount({
+        plugin: 'clawd-sidekick',
+        surface,
+        component: 'ToolUse',
+        requestId: 'toolu_1',
+        props: { tool_use_id: 'toolu_1', tool: 'Bash', input: { command: 'npm test -- --watch=false' }, isRunning, isErrored: false, isInterrupted: false },
+      } as never)
+    const running = await row('desktop', true)
+    expect(await running.find({ type: 'Svg' })).toBeDefined()
+    expect(await running.find({ text: /Running a command/, in: 'tool-toolu_1' })).toBeDefined()
+    expect(await running.find({ text: /npm test -- --watch=false/, in: 'tool-toolu_1' })).toBeDefined()
+    await running.unmount()
+    expect(await (await row('desktop', false)).find({ text: 'engine row: Bash' })).toBeDefined()
+    expect(await (await row('terminal', true)).find({ text: 'engine row: Bash' })).toBeDefined()
   })
 
   test('between turns Clawd stands by on the hint line, and gives it back while Claude works', async ($, on) => {
@@ -677,9 +699,13 @@ describe('the band above the prompt', () => {
   })
 
   test('the season and the holiday can be set by hand and handed back to the date', async ($, on) => {
-    world(on)
+    const w = world(on)
     await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
-    const run = (args: string) => $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    const run = async (args: string) => {
+      const ran = await $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+      expect(ran.text).toBeUndefined()
+      return { text: w.toasts.at(-1) ?? '' }
+    }
     expect((await run('holiday christmas')).text).toContain('聖誕節')
     expect((await run('season winter')).text).toContain('冬天')
     expect((await run('holiday auto')).text).toContain('平常日')
@@ -697,7 +723,11 @@ describe('the band above the prompt', () => {
     await w.clock.settle()
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
     expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toContain('#F6B6C8')
-    const run = (args: string) => $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    const run = async (args: string) => {
+      const ran = await $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+      expect(ran.text).toBeUndefined()
+      return { text: w.toasts.at(-1) ?? '' }
+    }
     expect((await run('season auto')).text).toContain('春天')
     expect(asked).toHaveLength(0)
   })

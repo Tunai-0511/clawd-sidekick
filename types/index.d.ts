@@ -23,18 +23,6 @@ export type Pose =
   /** The conversation is being compacted. */
   | 'tidy'
 
-/** Something only the person can do, kept across sessions and projects. */
-export type Todo = {
-  id: string
-  text: string
-  project: string
-  createdAt: number
-  isDone: boolean
-  doneAt?: number
-  /** Typed with /todo add rather than read off a reply. */
-  isManual: boolean
-}
-
 export type Deadline = {
   id: string
   title: string
@@ -119,14 +107,13 @@ export type Neighbor = {
 /** Everything the house draws from. */
 export type SceneProps = {
   actors: SceneActor[]
-  todos: number
+  /** The deadlines ahead pinned to the board, nearest first (at most eight). */
+  notes: { text: string; urgency: 'far' | 'near' | 'urgent' | 'over' }[]
   /** Whole days to the nearest deadline ahead; null when there is none. */
   days: number | null
   urgency: 'far' | 'near' | 'urgent' | 'over' | 'none'
   game: Game
   time: TimeOfDay
-  /** The open todos, for the board's hover. */
-  board: string[]
   /** The nearest deadline in words, for the calendar's hover; '' for none. */
   deadline: string
   /** The language the house's signs and tips speak. */
@@ -220,7 +207,6 @@ export type Life = {
   bestDayTools: number
   scenes: Theme[]
   holidays: Holiday[]
-  todosDone: number
 }
 
 /** The trophies reached (`family:tier` → when), and what the main Clawd wears and walks with. */
@@ -247,7 +233,6 @@ declare module 'claude-code' {
   interface PluginState {
     'clawd-sidekick': {
       activity: Activity
-      todos: Todo[]
       deadlines: Deadline[]
       isCollapsed: boolean
       pets: number

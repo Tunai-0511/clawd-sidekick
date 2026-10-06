@@ -864,7 +864,7 @@ export function tipOf(s: SceneProps, hit: Hit): string {
       return a === undefined ? '' : actorTip(a, s.lang)
     }
     case 'board':
-      return s.board.length === 0 ? words.boardEmpty : words.board(s.board)
+      return s.notes.length === 0 ? words.boardEmpty : words.board(s.notes.map(n => n.text))
     case 'calendar':
       return s.deadline === '' ? words.calendarEmpty : words.calendar(s.deadline)
     case 'memory':

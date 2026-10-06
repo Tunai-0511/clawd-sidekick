@@ -34,17 +34,18 @@ const ROOM_EDGES = [46, 94, 136, 174] as const
 
 // ── Furniture every scene shares ───────────────────────────────────────────
 
-/** The board your to-dos are pinned to: 16 × 9 at (48, 5). */
+/** The board the deadlines are pinned to: 16 × 9 at (48, 5). */
 function noticeBoard(g: Grid, s: SceneProps, frame: number, surface: number): void {
   rect(g, 48, 5, 16, 9, frame)
   rect(g, 49, 6, 14, 7, surface)
-  const colors = [C.yellow, C.pink, C.green, C.sky]
-  for (let i = 0; i < Math.min(8, s.todos); i++) {
+  // A note for each deadline ahead, the colour of how near it is.
+  const colors = { far: C.green, near: C.yellow, urgent: C.pink, over: C.gray } as const
+  s.notes.slice(0, 8).forEach((note, i) => {
     const x = 50 + (i % 4) * 3
     const y = 7 + Math.floor(i / 4) * 3
-    rect(g, x, y, 2, 2, colors[i % 4] ?? C.yellow)
+    rect(g, x, y, 2, 2, colors[note.urgency])
     px(g, x, y, C.red)
-  }
+  })
 }
 
 /** The calendar counting down to the next deadline: 9 × 8 at (66, 4). */

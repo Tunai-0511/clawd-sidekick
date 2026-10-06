@@ -289,7 +289,7 @@ function hovers(s: SceneProps): string {
     const tip = words.roomTip(words.rooms[s.theme][room.id], words.roomPurpose[room.id])
     return `<g class="room">${rectOf({ x: room.x, y: 3, w: room.w, h: 22 }, 'class="glass"')}<title>${escape(tip)}</title></g>`
   }).join('')
-  const board = words.boardTitle(s.board)
+  const board = words.boardTitle(s.notes.map(n => n.text))
   const calendar = s.deadline === '' ? words.calendarEmpty : words.calendar(s.deadline)
   const ring = (b: Box): string =>
     rectOf({ x: b.x - 0.5, y: b.y - 0.5, w: b.w + 1, h: b.h + 1 }, 'class="on" fill="none" stroke="#F5C542" stroke-width="0.5"')

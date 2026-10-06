@@ -99,3 +99,10 @@ export const URGENCY_COLOR: Record<Urgency, string> = {
   urgent: '#E5484D',
   over: '#5C6068',
 }
+
+/** A short id for a new deadline: when it was made, and a little of its title. */
+export function newId(now: number, salt: string): string {
+  let h = 0
+  for (let i = 0; i < salt.length; i++) h = (Math.imul(h, 31) + salt.charCodeAt(i)) | 0
+  return `${now.toString(36)}${(Math.abs(h) % 1296).toString(36)}`
+}

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.0
+
+- **No tokens at all.** Removed the to-dos Claude hands you: the notes a small model read off replies, `/todo`, the `autoTodo` and `todoModel` settings, and the "Your half" trophies (75 trophies now). It was the only thing that called a model; Clawd Sidekick now calls none.
+- Commands answer in a toast instead of a transcript line, which stayed in the conversation for the model to read on every later turn. `/deadline` with no arguments opens the pane.
+- The board pins the deadlines ahead, one note each, coloured by how near they are; its hover lists them.
+- In the Desktop app, a tool's row in the conversation shows Clawd at his laptop while the tool runs, with its clock and its command or file; once done, the row is the engine's again.
+
 ## 0.12.0
 
 - **Neighbors**: the other Claude Code sessions on the machine come to visit. Each session tells the others what it is up to through the plugin's store (its project, pose, words and whether it is working) when a turn starts or ends and every 15 seconds, and takes it back when it ends. Up to two busy neighbors walk in from the right to the room of what their Claude is doing, in caps of their own (red, yellow, teal, pink) with their project on the bubble, and walk out when they stop or fall quiet for 45 seconds. They never join the crew's games. The band lists the sessions next door.

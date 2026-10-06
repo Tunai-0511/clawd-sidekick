@@ -32,7 +32,6 @@ export type FamilyId =
   | 'scenes'
   | 'holidays'
   | 'comeback'
-  | 'todos'
 
 /** How a family's progress reads: a count, days, or time in hours or minutes. */
 export type Unit = 'count' | 'days' | 'hours' | 'minutes'
@@ -257,17 +256,6 @@ export const FAMILIES: readonly Family[] = [
       { tier: 'gold', target: 50 },
     ],
   },
-  {
-    id: 'todos',
-    unit: 'count',
-    progress: l => l.todosDone,
-    tiers: [
-      { tier: 'bronze', target: 10 },
-      { tier: 'silver', target: 100 },
-      { tier: 'gold', target: 500 },
-      { tier: 'legend', target: 2000 },
-    ],
-  },
 ]
 
 export const TROPHY_TOTAL = FAMILIES.reduce((sum, f) => sum + f.tiers.length, 0)
@@ -305,7 +293,6 @@ export function emptyLife(): Life {
     bestDayTools: 0,
     scenes: [],
     holidays: [],
-    todosDone: 0,
   }
 }
 
