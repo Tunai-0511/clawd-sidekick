@@ -59,6 +59,10 @@ With reduced motion turned on in your system settings, the Desktop scene holds s
 
 **A Clawd spinner.** The `Thinking…` line becomes a small Clawd who thinks in dots, then sits down at a laptop and types away while Claude works, beside a clock that counts every second.
 
+**Clawd's day.** `/clawd recap` (or **Today** in the `/clawd` pane) shows a card of the day so far: how long Clawd worked alongside Claude, turns, tool calls, files edited, commands, tests passed, commits, pushes and tidy-ups, where the day went room by room, the week, and your streak of days in a row. It counts every session and project on the machine, and it's made to be screenshotted and shared.
+
+![Clawd's day: 3 h 12 min with Claude, 14 turns, 148 tool calls, 5 of 6 tests passed, 3 commits, the time by room, the week, and a 4-day streak](./docs/recap-en.png)
+
 **Live figures** under the house: model, context fill, 5-hour and 7-day plan usage, session cost, the turn timer, and this turn's tool calls, edits and commands. Each turns yellow past 50% and red past 80%.
 
 **The human's half.** When a reply hands you something only you can do, such as creating an API key, uploading a file or signing up for something, a small model notes it on the board. The list carries across sessions and projects. You tick items off with □ (or the keys 1–3), or use `/todo`.
@@ -93,6 +97,7 @@ Third-party marketplaces don't auto-update by default, and a marketplace can't s
 | Command | What it does |
 | --- | --- |
 | `/clawd` | Open the Clawd Sidekick pane: big Clawd, your full to-do list, all deadlines |
+| `/clawd recap` | Today's card: time worked, the figures, the rooms, the week and your streak |
 | `/clawd scene house` · `beach` · `space` · `forest` · `next` | Move the Clawds to another scene |
 | `/clawd season winter` · `auto` | Set the season by hand, or follow the date |
 | `/clawd holiday christmas` · `lunar` · `halloween` · `none` · `auto` | Set the decorations by hand, or follow the date |
@@ -117,7 +122,7 @@ A mod runs with your permissions, so here is everything this one reaches (`claud
 
 - **Model calls**: only after a turn whose reply looks like it hands you something ("you'll need to…", "please upload…"), one short call to `todoModel`. Nothing else calls a model.
 - **Processes**: `date +%z` and `readlink /etc/localtime` once at start, for your time zone and which way the seasons run; `defaults read -g AppleLanguages` once, on macOS, when the language is `auto` and no `LANG` is set.
-- **Storage**: your to-dos, deadlines, scene, language and pet count, in the plugin's own store on your machine.
+- **Storage**: your to-dos, deadlines, scene, language, pet count and each day's figures for the recap, in the plugin's own store on your machine.
 - **Environment**: reads `LANG`, `LC_ALL`, `LC_MESSAGES` and `TZ`.
 - **Network: none.**
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.0
+
+- **Clawd's day**: `/clawd recap`, or **Today** in the `/clawd` pane, shows a card of the day so far: time worked alongside Claude, turns, tool calls, files edited, commands, tests passed, commits, pushes, tidy-ups, the time by room, the week and the streak of days with work. It counts every session and project, one record per local date, and is drawn to be screenshotted and shared (an SVG card on the desktop, text and colour bars in the terminal).
+
 ## 0.9.1
 
 - The spinner's working Clawd sits at a laptop, his arms taking turns at the keys, on the desktop and in the terminal. Thinking, he still thinks in dots.

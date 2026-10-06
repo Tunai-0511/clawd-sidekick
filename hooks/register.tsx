@@ -10,7 +10,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement } from 'claude-code'
 
-import type { Activity, Deadline, Doing, Game, Holiday, Pose, SceneActor, SceneProps, Season, Theme, TimeOfDay, Todo, Usage } from '../types'
+import type { Activity, Day, Deadline, Doing, Game, Holiday, Pose, RoomId, SceneActor, SceneProps, Season, Theme, TimeOfDay, Todo, Usage } from '../types'
 import { countdown, formatDue, parseDeadline, parseOffset, urgency, URGENCY_COLOR } from './deadline'
 import { langOf, say, type Lang } from './i18n'
 import { actorX, layoutFor, ROOMS, SH, SPOT_X, SW, type Spot } from './scene'
@@ -18,13 +18,15 @@ import { miniClawdSvg, sceneSvg } from './scene-svg'
 import { H, W } from './sprite'
 import { THEME_ORDER } from './themes'
 import { clawdSvg } from './svg'
-import { momentOf, type GitOperation } from './events'
+import { isTestRun, momentOf, type GitOperation } from './events'
+import { dateOf, dayBefore, duration, emptyDay, favoriteRoom, poseOf, recapLine, recapSvg, ROOM_IDS, streakOf } from './recap'
 import { holidayOf, seasonOf, zoneOf } from './seasons'
 import { extractPrompt, isDuplicate, newId, ordered, parseList, shouldExtract } from './todo'
 
 type Engine = EngineInterface
 
 const PANE = 'clawd'
+const RECAP = 'clawd-recap'
 const ORANGE = '#D97757'
 /** CSS pixels a desktop cell is taken to be, to size the house's frame. */
 const CELL_PX = 8
@@ -41,6 +43,7 @@ const gameAtom = atom({ plugin: 'clawd-sidekick', key: 'game' } as const, 'pong'
 const langAtom = atom({ plugin: 'clawd-sidekick', key: 'lang' } as const, 'en')
 const themeAtom = atom({ plugin: 'clawd-sidekick', key: 'theme' } as const, 'house')
 const zoneAtom = atom({ plugin: 'clawd-sidekick', key: 'zone' } as const, '')
+const todayAtom = atom({ plugin: 'clawd-sidekick', key: 'today' } as const, null)
 const seasonPickAtom = atom({ plugin: 'clawd-sidekick', key: 'seasonPick' } as const, 'auto')
 const holidayPickAtom = atom({ plugin: 'clawd-sidekick', key: 'holidayPick' } as const, 'auto')
 
@@ -261,10 +264,41 @@ async function releaseCrew($: Engine, agentKey: string): Promise<void> {
 }
 
 /** A pat on the head: hearts, and back to what he was doing. */
+// ── The day, for /clawd recap ───────────────────────────────────────────
+
+const ROOM_OF_SPOT: Partial<Record<Spot, RoomId>> = { library: 'library', board: 'codelab', code: 'codelab', bash: 'terminal', web: 'web', arcade: 'game' }
+
+/** Today's record from the store (another session's work counts too), changed and kept. */
+async function logDay($: Engine, change: (day: Day) => void): Promise<void> {
+  const date = dateOf(await $.clock.now(), await read($, offsetAtom))
+  const kept = (await $.store.get(`day:${date}`)) as Day | undefined
+  const day: Day = kept === undefined ? emptyDay(date) : { ...emptyDay(date), ...kept, rooms: { ...emptyDay(date).rooms, ...kept.rooms } }
+  change(day)
+  await $.store.set(`day:${date}`, day)
+  await update($, todayAtom, () => day)
+}
+
+/** Today and the six days before it, oldest first, and the streak of days with work. */
+async function readWeek($: Engine): Promise<{ today: Day; week: (Day | undefined)[]; streak: number }> {
+  const date = dateOf(await $.clock.now(), await read($, offsetAtom))
+  const days: (Day | undefined)[] = []
+  let at = date
+  for (let i = 0; i < 60; i++) {
+    const day = (await $.store.get(`day:${at}`)) as Day | undefined
+    days.push(day === undefined ? undefined : { ...emptyDay(at), ...day, rooms: { ...emptyDay(at).rooms, ...day.rooms } })
+    if (i >= 7 && (day === undefined || day.turns + day.tools === 0)) break
+    at = dayBefore(at)
+  }
+  return { today: days[0] ?? emptyDay(date), week: days.slice(0, 7).reverse(), streak: streakOf(days) }
+}
+
 function onPet($: Engine, id: string): void {
   void (async () => {
     const pets = await update($, petsAtom, n => n + 1)
     await $.store.set('pets', pets)
+    await logDay($, day => {
+      day.pets++
+    })
     if (id !== 'main') {
       await update($, actorsAtom, actors => actors.map(a => (a.id === id && a.agentKey === undefined ? { ...a, doing: 'love' } : a)))
       $.clock.after(2000, () => void arrangeCrew($))
@@ -713,6 +747,7 @@ export const register: Register = (on, options) => {
           {sprite}
           <Text color={ORANGE}>{`「${doing.label || w.hello}」`}</Text>
           <Text dimColor>{w.petted(pets)}</Text>
+          <Button key="recap" label={w.recapButton} hotkey="r" onPress={() => $.ui.open({ id: RECAP, title: w.recapPaneTitle })} />
         </Box>
 
         <Box flexDirection="column">
@@ -742,6 +777,78 @@ export const register: Register = (on, options) => {
             </Box>
           ))}
         </Box>
+      </Box>
+    )
+  })
+
+  on('ui.render', { component: 'Pane', requestId: RECAP }, async ($, e) => {
+    const [talk, theme] = await Promise.all([read($, langAtom), read($, themeAtom), read($, todayAtom)])
+    const { today, week, streak } = await readWeek($)
+    const w = say(talk)
+    const { Box, Text } = $.ui.resolve(e)
+    if (e.surface !== 'terminal') {
+      const { Svg } = $.ui.resolve(e)
+      const width = Math.min(720, Math.max(360, Math.round(e.props.bodyColumns * CELL_PX)))
+      return <Svg source={recapSvg(today, week, streak, talk, theme)} alt={recapLine(today, streak, talk)} width={width} height={Math.round((width * 140) / 240)} />
+    }
+    const { Client } = $.ui.resolve(e)
+    const favorite = favoriteRoom(today)
+    const total = ROOM_IDS.reduce((sum, id) => sum + today.rooms[id], 0)
+    const BAR = 40
+    const COLOR: Record<RoomId, string> = { library: '#C8873F', codelab: '#4D8DF6', terminal: '#4CB363', web: '#8ECDF5', game: '#A98BF5' }
+    const most = Math.max(1, ...week.map(d => d?.tools ?? 0))
+    const spark = week.map(d => ' ▁▂▃▄▅▆▇█'[Math.round((8 * (d?.tools ?? 0)) / most)] ?? ' ').join('')
+    const figure = (value: string | number, label: string): RenderElement => (
+      <Text>
+        <Text bold>{String(value)}</Text>
+        <Text dimColor>{` ${label}`}</Text>
+      </Text>
+    )
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Text color={ORANGE} bold>{`── ${w.recapTitle} · ${w.recapDate(today.date)} ──`}</Text>
+        <Box flexDirection="row" gap={2} alignItems="center">
+          <Client key="recap-clawd" module="./clawd-client.tsx" props={{ pose: poseOf(today), isNervous: false, scale: 1 }} width={W} height={H / 2} />
+          <Box flexDirection="column">
+            <Text color={ORANGE}>{today.turns + today.tools === 0 ? w.recapQuiet : w.recapWorked(duration(today.workMs, talk))}</Text>
+            {favorite === undefined ? null : <Text dimColor>{w.recapFavorite(w.rooms[theme][favorite])}</Text>}
+          </Box>
+        </Box>
+        <Box flexDirection="row" flexWrap="wrap" columnGap={3}>
+          {figure(today.turns, w.recapTurns(today.turns))}
+          {figure(today.tools, w.recapTools(today.tools))}
+          {figure(today.edits, w.recapEdits(today.edits))}
+          {figure(today.runs, w.recapRuns(today.runs))}
+          {figure(`${today.testsPassed}/${today.testsPassed + today.testsFailed}`, w.recapTests)}
+          {figure(today.commits, w.recapCommits(today.commits))}
+          {figure(today.pushes + today.prsOpened, w.recapPushes(today.pushes + today.prsOpened))}
+          {figure(today.compactions, w.recapTidies(today.compactions))}
+        </Box>
+        <Box flexDirection="column">
+          <Text dimColor>{w.recapWhere}</Text>
+          <Text>
+            {total === 0 ? (
+              <Text dimColor>{'░'.repeat(BAR)}</Text>
+            ) : (
+              ROOM_IDS.map(id => <Text color={COLOR[id]}>{'█'.repeat(Math.round((BAR * today.rooms[id]) / total))}</Text>)
+            )}
+          </Text>
+          <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
+            {total === 0
+              ? null
+              : ROOM_IDS.filter(id => today.rooms[id] > 0).map(id => (
+                  <Text>
+                    <Text color={COLOR[id]}>■</Text>
+                    <Text dimColor>{` ${w.rooms[theme][id]} ${Math.round((100 * today.rooms[id]) / total)}%`}</Text>
+                  </Text>
+                ))}
+          </Box>
+        </Box>
+        <Text>
+          <Text dimColor>{`${w.recapWeek} `}</Text>
+          <Text color={ORANGE}>{spark}</Text>
+          <Text color={ORANGE} bold>{`  ${w.recapStreak(streak)}`}</Text>
+        </Text>
       </Box>
     )
   })
@@ -786,6 +893,11 @@ export const register: Register = (on, options) => {
 
   on('command.run', { command: 'clawd' }, async ($, e) => {
     const [arg = '', choice = ''] = e.args.trim().split(/\s+/)
+    if (arg === 'recap') {
+      await $.ui.open({ id: RECAP, title: say(lang).recapPaneTitle })
+      const { today, streak } = await readWeek($)
+      return { text: recapLine(today, streak, lang) }
+    }
     if (arg === 'hide') {
       await setCollapsed($, true)
       return { text: say(lang).folded }
@@ -947,6 +1059,23 @@ export const register: Register = (on, options) => {
         if (!isFailed && ran.deny === undefined && EDIT_TOOLS.has(tool)) await count($, 'edits')
         const git = !isFailed && ran.deny === undefined ? (ran.result as { gitOperation?: GitOperation } | undefined)?.gitOperation : undefined
         const moment = tool === 'Bash' && ran.deny === undefined ? momentOf(str(input.command), isFailed, git, lang) : undefined
+        const spot = PLACE[seen.pose].spot
+        const room = spot === null ? undefined : ROOM_OF_SPOT[spot]
+        if (ran.deny === undefined) await logDay($, day => {
+          day.tools++
+          if (room !== undefined) day.rooms[room]++
+          if (!isFailed && EDIT_TOOLS.has(tool)) day.edits++
+          if (tool === 'Bash') day.runs++
+          if (isDispatch) day.helpers++
+          if (tool === 'Bash' && isTestRun(str(input.command))) {
+            if (isFailed) day.testsFailed++
+            else day.testsPassed++
+          }
+          if (git?.commit !== undefined) day.commits++
+          if (git?.push !== undefined) day.pushes++
+          if (git?.pr?.action === 'created') day.prsOpened++
+          if (git?.pr?.action === 'merged') day.prsMerged++
+        })
         if (moment !== undefined) await flash($, moment.pose, moment.label, moment.ms, () => settle($))
         else if (isFailed) await flash($, 'oops', say(lang).failed(seen.label), 2500, () => settle($))
         else if (isWorking && seen.pose !== 'wait') await act($, 'think', say(lang).thinking)
@@ -979,6 +1108,9 @@ export const register: Register = (on, options) => {
     }
     const compacted = await next(e)
     try {
+      await logDay($, day => {
+        day.compactions++
+      })
       await refreshUsage($, true)
       await flash($, 'cheer', say(lang).compacted, 3000, () => settle($))
     } catch {
@@ -992,6 +1124,11 @@ export const register: Register = (on, options) => {
     if (e.agentId !== undefined) return result
     isWorking = false
     lastTurnMs = e.durationMs
+    await logDay($, day => {
+      day.turns++
+      day.workMs += e.durationMs
+      day.longestMs = Math.max(day.longestMs, e.durationMs)
+    })
     void refreshUsage($, true)
     await arrangeCrew($)
     if (e.reason === 'aborted') {

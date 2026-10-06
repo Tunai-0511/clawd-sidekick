@@ -36,6 +36,9 @@ function flipbook(pose: Pose, options: FrameOptions): string {
     .join('')
 }
 
+/** Clawd in `pose` as groups to set inside another SVG, on a 40 × 14 grid of his own. */
+export const clawdArt = (pose: Pose, options: FrameOptions = {}): string => flipbook(pose, options)
+
 /** An animated SVG of Clawd in `pose`, `scale` CSS pixels a pixel. */
 export function clawdSvg(pose: Pose, options: FrameOptions = {}, scale = 4): string {
   const main = flipbook(pose, options)

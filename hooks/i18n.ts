@@ -115,6 +115,29 @@ export type Strings = {
   folded: string
   unfolded: string
   paneOpened: string
+  // The day's recap card
+  recapTitle: string
+  recapPaneTitle: string
+  recapButton: string
+  recapDate: (date: string) => string
+  recapQuiet: string
+  recapWorked: (duration: string) => string
+  /** The words over the day's working time, set large beneath them. */
+  recapWorkedLead: string
+  recapFavorite: (room: string) => string
+  recapDuration: (hours: number, minutes: number) => string
+  recapTurns: (n: number) => string
+  recapTools: (n: number) => string
+  recapEdits: (n: number) => string
+  recapRuns: (n: number) => string
+  recapTests: string
+  recapCommits: (n: number) => string
+  recapPushes: (n: number) => string
+  recapTidies: (n: number) => string
+  recapWhere: string
+  recapWeek: string
+  recapStreak: (days: number) => string
+  recapLine: (d: { turns: number; work: string; tools: number; edits: number; passed: number; failed: number; commits: number; pushes: number; streak: number }) => string
   speaks: string
   langUsage: string
   todoUsage: string
@@ -246,15 +269,40 @@ const zh: Strings = {
   deadlines: '截止日',
   remove: '移除',
   petted: count => `被摸了 ${count} 次`,
-  describeClawd: 'Clawd 副駕：打開面板（/clawd scene 換場景、/clawd hide 收合、/clawd lang en 換英文）',
+  describeClawd: 'Clawd 副駕：打開面板（/clawd recap 今日戰報、/clawd scene 換場景、/clawd hide 收合、/clawd lang en 換英文）',
   describeTodo: 'Clawd 幫你記的人類待辦',
   describeDeadline: '截止日雷達：越接近 Clawd 越慌',
-  hintClawd: '[scene 名稱|season|holiday|hide|show|lang]',
+  hintClawd: '[recap|scene 名稱|season|holiday|hide|show|lang]',
   hintTodo: '[add 事情|done N|undo|rm N|clear]',
   hintDeadline: '[add 12/24 名稱|rm N]',
   folded: 'Clawd 收成一行了，/clawd show 叫他回來。',
   unfolded: 'Clawd 回來了。',
   paneOpened: 'Clawd 副駕面板打開了。',
+  recapTitle: 'Clawd 的一天',
+  recapPaneTitle: 'Clawd 的一天',
+  recapButton: '今日戰報',
+  recapDate: date => {
+    const d = new Date(`${date}T00:00:00Z`)
+    return `${d.getUTCMonth() + 1} 月 ${d.getUTCDate()} 日（${'日一二三四五六'[d.getUTCDay()]}）`
+  },
+  recapQuiet: '今天還沒開工',
+  recapWorked: duration => `陪 Claude 工作了 ${duration}`,
+  recapWorkedLead: '陪 Claude 工作了',
+  recapFavorite: room => `最常待在${room}`,
+  recapDuration: (h, m) => (h > 0 ? `${h} 小時 ${m} 分` : `${m} 分鐘`),
+  recapTurns: () => '個回合',
+  recapTools: () => '次工具',
+  recapEdits: () => '個檔改過',
+  recapRuns: () => '個指令',
+  recapTests: '測試過',
+  recapCommits: () => '次 commit',
+  recapPushes: () => '次 push',
+  recapTidies: () => '次整理記憶',
+  recapWhere: '時間都去哪了',
+  recapWeek: '這週',
+  recapStreak: days => (days > 0 ? `連續 ${days} 天` : '今天開工吧'),
+  recapLine: d =>
+    `今天 ${d.turns} 個回合、工作了 ${d.work}：用了 ${d.tools} 次工具、改了 ${d.edits} 個檔，測試 ${d.passed} 過 ${d.failed} 沒過，${d.commits} 次 commit、${d.pushes} 次 push。連續 ${d.streak} 天。`,
   speaks: 'Clawd 改說中文了。',
   langUsage: '用法：/clawd lang zh、/clawd lang en、/clawd lang auto（跟系統語言）',
   todoUsage: '用法：/todo add 要做的事',
@@ -424,15 +472,42 @@ const en: Strings = {
   deadlines: 'Deadlines',
   remove: 'Remove',
   petted: count => (count === 1 ? 'Petted once' : `Petted ${count} times`),
-  describeClawd: 'Clawd Sidekick: open the pane (/clawd scene changes the scene, /clawd hide folds the band, /clawd lang zh switches to Chinese)',
+  describeClawd: 'Clawd Sidekick: open the pane (/clawd recap shows your day, /clawd scene changes the scene, /clawd hide folds the band, /clawd lang zh switches to Chinese)',
   describeTodo: 'The things Clawd noted for you to do',
   describeDeadline: 'Deadline radar: the closer it gets, the more Clawd frets',
-  hintClawd: '[scene name|season|holiday|hide|show|lang]',
+  hintClawd: '[recap|scene name|season|holiday|hide|show|lang]',
   hintTodo: '[add something|done N|undo|rm N|clear]',
   hintDeadline: '[add 12/24 name|rm N]',
   folded: 'Clawd folded into one line. /clawd show brings him back.',
   unfolded: 'Clawd is back.',
   paneOpened: 'Opened the Clawd Sidekick pane.',
+  recapTitle: "Clawd's day",
+  recapPaneTitle: "Clawd's day",
+  recapButton: 'Today',
+  recapDate: date => {
+    const d = new Date(`${date}T00:00:00Z`)
+    const day = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()]
+    const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()]
+    return `${day}, ${month} ${d.getUTCDate()}`
+  },
+  recapQuiet: 'No work yet today',
+  recapWorked: duration => `Worked alongside Claude for ${duration}`,
+  recapWorkedLead: 'Worked with Claude for',
+  recapFavorite: room => `Mostly in the ${room.toLowerCase()}`,
+  recapDuration: (h, m) => (h > 0 ? `${h} h ${m} min` : `${m} min`),
+  recapTurns: n => (n === 1 ? 'turn' : 'turns'),
+  recapTools: n => (n === 1 ? 'tool call' : 'tool calls'),
+  recapEdits: n => (n === 1 ? 'file edited' : 'files edited'),
+  recapRuns: n => (n === 1 ? 'command' : 'commands'),
+  recapTests: 'tests passed',
+  recapCommits: n => (n === 1 ? 'commit' : 'commits'),
+  recapPushes: n => (n === 1 ? 'push' : 'pushes'),
+  recapTidies: n => (n === 1 ? 'tidy-up' : 'tidy-ups'),
+  recapWhere: 'Where the day went',
+  recapWeek: 'This week',
+  recapStreak: days => (days === 1 ? '1-day streak' : days > 0 ? `${days}-day streak` : 'Start a streak'),
+  recapLine: d =>
+    `Today: ${d.turns} turns over ${d.work}, ${d.tools} tool calls, ${d.edits} files edited, tests ${d.passed} passed and ${d.failed} failed, ${d.commits} commits, ${d.pushes} pushes. ${d.streak}-day streak.`,
   speaks: 'Clawd speaks English now.',
   langUsage: 'Usage: /clawd lang en, /clawd lang zh, /clawd lang auto (follow the system language)',
   todoUsage: 'Usage: /todo add <something to do>',

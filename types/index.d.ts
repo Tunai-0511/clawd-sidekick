@@ -129,6 +129,34 @@ export type SceneProps = {
   holiday: Holiday
 }
 
+/** The library, the code lab, the terminal room, the lookout and the game room, in every scene. */
+export type RoomId = 'library' | 'codelab' | 'terminal' | 'web' | 'game'
+
+/** One local day of work, across sessions and projects, for /clawd recap. */
+export type Day = {
+  /** The person's local date, '2026-10-06'. */
+  date: string
+  turns: number
+  /** Time Claude spent working, summed over the turns. */
+  workMs: number
+  longestMs: number
+  tools: number
+  edits: number
+  runs: number
+  /** Tool calls by the room Clawd went to for them. */
+  rooms: Record<RoomId, number>
+  testsPassed: number
+  testsFailed: number
+  commits: number
+  pushes: number
+  prsOpened: number
+  prsMerged: number
+  compactions: number
+  /** Subagents sent out. */
+  helpers: number
+  pets: number
+}
+
 /** The status line figures: model, context, plan windows, cost, this turn. */
 export type Usage = {
   model: string
@@ -166,6 +194,8 @@ declare module 'claude-code' {
       /** A season or holiday chosen by hand, else 'auto' (the local date). */
       seasonPick: Season | 'auto'
       holidayPick: Holiday | 'auto'
+      /** Today so far, for the recap card. */
+      today: Day | null
     }
   }
 }

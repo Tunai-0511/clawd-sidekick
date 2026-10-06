@@ -3,6 +3,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { Doing, Game, SceneActor, SceneProps, Season, Theme, TimeOfDay } from '../types'
 import { countdown, parseDeadline, urgency } from '../hooks/deadline'
 import { isTestRun, momentOf } from '../hooks/events'
+import { dateOf, dayBefore, emptyDay, poseOf, recapSvg, streakOf } from '../hooks/recap'
 import { composeScene, hitTest, layoutFor, SPOT_X, tipOf } from '../hooks/scene'
 import { sceneSvg } from '../hooks/scene-svg'
 import { holidayOf, isSouthern, seasonOf, zoneOf } from '../hooks/seasons'
@@ -225,6 +226,60 @@ describe('what happens shows in every scene', () => {
     expect(momentOf('gh pr merge 12', false, { pr: { number: 12, action: 'merged' } }, 'zh')).toMatchObject({ pose: 'cheer', label: 'PR #12 合併了！' })
     expect(momentOf('git push', true, { push: { branch: 'main' } }, 'zh')).toBeUndefined()
     expect(momentOf('ls', false, undefined, 'zh')).toBeUndefined()
+  })
+})
+
+describe("Clawd's day", () => {
+  const busy = { ...emptyDay('2026-10-06'), turns: 14, workMs: 192 * 60_000, tools: 148, edits: 23, runs: 41, rooms: { library: 38, codelab: 61, terminal: 41, web: 8, game: 0 }, testsPassed: 5, testsFailed: 1, commits: 3, pushes: 2 }
+
+  test('days follow the local date, and a streak counts the days in a row with work', async () => {
+    expect(dateOf(Date.UTC(2026, 9, 6, 17, 0), 480)).toBe('2026-10-07')
+    expect(dayBefore('2026-03-01')).toBe('2026-02-28')
+    expect(streakOf([busy, busy, undefined, busy])).toBe(2)
+    expect(streakOf([emptyDay('2026-10-06'), busy, busy])).toBe(2)
+    expect(streakOf([undefined])).toBe(0)
+    expect(poseOf(emptyDay('2026-10-06'))).toBe('sleep')
+    expect(poseOf(busy)).toBe('cheer')
+  })
+
+  test('the card fits every scene and both languages, and says a quiet day is quiet', async () => {
+    for (const theme of THEME_ORDER) {
+      for (const lang of ['zh', 'en'] as const) {
+        const svg = recapSvg(busy, [undefined, busy, busy], 3, lang, theme)
+        expect(svg.length).toBeLessThan(131072)
+        expect(svg).toContain('148')
+        expect(svg).toContain(lang === 'zh' ? '3 小時 12 分' : '3 h 12 min')
+      }
+    }
+    expect(recapSvg(emptyDay('2026-10-06'), [], 0, 'zh', 'house')).toContain('今天還沒開工')
+    expect(recapSvg({ ...busy, commits: 1 }, [], 1, 'en', 'house')).toContain('>commit</tspan>')
+  })
+
+  test('/clawd recap sums up today across sessions, with yesterday in the streak', async ($, on) => {
+    world(on, [], { 'day:2026-10-05': { ...emptyDay('2026-10-05'), turns: 2, tools: 9 } })
+    on('tool.call', async (_$, e) => {
+      const command = String((e as unknown as { command?: string }).command ?? '')
+      const git = command.startsWith('git commit') ? { gitOperation: { commit: { sha: 'abc1234', kind: 'committed' } } } : {}
+      return { result: { stdout: '', stderr: '', interrupted: false, ...git } as never }
+    })
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    await $.turn.start({ text: '修好再 commit', turnId: 't1' })
+    await $.tool.call({ tool: 'Bash', command: 'npm test' } as never)
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m "fix"' } as never)
+    await $.turn.complete({ turnId: 't1', reason: 'answer', answer: '好了', durationMs: 5 * 60_000 } as never)
+    const run = (args: string) => $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    const said = (await run('recap')).text ?? ''
+    expect(said).toContain('1 個回合')
+    expect(said).toContain('測試 1 過 0 沒過')
+    expect(said).toContain('1 次 commit')
+    expect(said).toContain('連續 2 天')
+    const pane = { plugin: 'clawd-sidekick', component: 'Pane', requestId: 'clawd-recap', props: { title: 'Clawd 的一天', isFocused: true, bodyColumns: 90, placement: 'dock' } } as never
+    const desktop = await $.ui.mount({ ...(pane as object), surface: 'desktop' } as never)
+    const card = String((await desktop.find({ type: 'Svg' }))?.props.source)
+    expect(card).toContain('1/1')
+    expect(card).toContain('連續 2 天')
+    const terminal = await $.ui.mount({ ...(pane as object), surface: 'terminal' } as never)
+    expect(await terminal.find({ text: /連續 2 天/ })).toBeDefined()
   })
 })
 

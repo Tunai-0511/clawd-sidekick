@@ -61,6 +61,16 @@
 
 **Clawd 版 Thinking 列**：「Thinking…」那一列變成一隻小 Clawd。思考時冒點點，Claude 開始工作時他就坐到筆電前打字，旁邊的秒數每秒跳。
 
+**今日戰報**：打 `/clawd recap`，或在 `/clawd` 面板按「今日戰報」，會出現一張今天的卡片，內容包括：
+- 陪 Claude 工作了多久
+- 回合、工具、改過的檔、指令、測試通過、commit、push、整理記憶的次數
+- 時間花在哪些房間
+- 這週每天的狀況，以及連續工作了幾天
+
+同一台電腦上所有 session 和專案都會算進去。卡片設計成適合截圖分享的樣子。
+
+![今日戰報：陪 Claude 工作了 3 小時 12 分、14 個回合、148 次工具、測試 6 次過 5 次、3 次 commit、各房間的時間、這週和連續 4 天](./docs/recap-zh.png)
+
 **即時數字**：模型、context 用量、5 小時和 7 天額度、花費、回合計時，以及這回合用了幾次工具、改了幾個檔、跑了幾個指令。超過 50% 變黃，超過 80% 變紅。
 
 **人類那一半**：Claude 的回覆裡如果交代了只有你能做的事，像是建 API 金鑰、上傳檔案、報名，小模型會把它記到布告欄上。清單跨 session、跨專案都保留。按 □（或數字鍵 1–3）打勾，或用 `/todo` 管理。
@@ -101,6 +111,7 @@ claude plugin install clawd-sidekick@clawd-sidekick
 | 指令 | 用途 |
 | --- | --- |
 | `/clawd` | 打開面板：大 Clawd、完整待辦清單、所有截止日 |
+| `/clawd recap` | 今日戰報：工作時間、各項數字、各房間的時間、這週、連續天數 |
 | `/clawd scene house`、`beach`、`space`、`forest`、`next` | 讓 Clawd 們搬到別的場景 |
 | `/clawd season winter`、`auto` | 手動指定季節，或跟著日期 |
 | `/clawd holiday christmas`、`lunar`、`halloween`、`none`、`auto` | 手動指定節日佈置，或跟著日期 |
@@ -123,7 +134,7 @@ mod 是用你的權限在跑，所以這裡列出它碰到的所有東西（`cla
 
 - **模型呼叫**：只在回覆看起來有交代你做事時（例如「你需要…」「請上傳…」），用 `todoModel` 呼叫一次。除此之外不會呼叫模型。
 - **執行程式**：啟動時各跑一次 `date +%z` 和 `readlink /etc/localtime` 取得時區，用來判斷時間和南北半球。語言設成 `auto` 又沒有 `LANG` 時，在 macOS 上跑一次 `defaults read -g AppleLanguages`。
-- **儲存**：待辦、截止日、場景、語言和被摸的次數，存在你電腦上這個 plugin 自己的儲存區。
+- **儲存**：待辦、截止日、場景、語言、被摸的次數，以及戰報用的每日數字，存在你電腦上這個 plugin 自己的儲存區。
 - **環境變數**：讀取 `LANG`、`LC_ALL`、`LC_MESSAGES`、`TZ`。
 - **網路：完全不連網。**
 
