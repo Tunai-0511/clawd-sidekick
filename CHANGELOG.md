@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.14.1
+
+- Every trophy now says what it asks, in a plain sentence with the next tier's target: the trophy pane has a line under each family ("Next (Silver): Work on 7 days in a row, for a party hat"), and the unlock toast says what was done. Some names read more plainly: All green, Pets, Marathon day (and in Chinese 測試全綠, 長回合, 工作馬拉松, 改檔, 工具呼叫, 摸摸 Clawd).
+
 ## 0.14.0
 
 - **A life of their own.** The crew keeps its own day by your clock: a picnic lunch at noon (rice balls, lunch boxes, a checked cloth) and tea at three (cups, a teapot, cake), whatever Claude is up to. After fifty minutes of work without a five-minute break, Clawd stretches and a toast suggests you do too, then every ten minutes he stretches again.

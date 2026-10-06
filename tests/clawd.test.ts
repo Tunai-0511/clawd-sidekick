@@ -304,7 +304,7 @@ describe('trophies', () => {
     expect(w.toasts.length).toBe(0)
     await $.turn.start({ text: '開工', turnId: 't1' })
     await $.turn.complete({ turnId: 't1', reason: 'answer', answer: '好', durationMs: 60_000 } as never)
-    expect(w.toasts.some(t => t.includes('連續開工・銅'))).toBe(true)
+    expect(w.toasts.some(t => t.includes('連續開工・銅：連續 3 天都有開工'))).toBe(true)
     const run = async (args: string) => {
       const ran = await $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
       expect(ran.text).toBeUndefined()
@@ -315,6 +315,8 @@ describe('trophies', () => {
     const pane = await $.ui.mount({ plugin: 'clawd-sidekick', surface: 'terminal', component: 'Pane', requestId: 'clawd-trophies', props: { title: '成就', isFocused: true, bodyColumns: 100, placement: 'dock' } } as never)
     expect(await pane.find({ text: /連續開工/ })).toBeDefined()
     expect(await pane.find({ text: /3 天 \/ 7 天/ })).toBeDefined()
+    expect(await pane.find({ text: /下一級（銀）：連續 7 天都有開工，可得派對帽/ })).toBeDefined()
+    expect(await pane.find({ text: /下一級（銅）：在半夜 0 點到 5 點開始了 1 個回合/ })).toBeDefined()
   })
 
   test('a hat earned can be worn, swapped and taken off', async ($, on) => {

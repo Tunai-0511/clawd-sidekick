@@ -156,14 +156,18 @@ export type Strings = {
   // Trophies
   tiers: Record<Tier, string>
   families: Record<FamilyId, string>
+  /** What a trophy asks, in a sentence, with the tier's target in it ("7 天"). */
+  familyWhat: Record<FamilyId, (target: string) => string>
+  /** A target as the sentences read it: "7 days", "8 hours", "1,000". */
+  amountLong: (unit: Unit, value: number) => string
+  nextTier: (tier: string, what: string, reward: string | null) => string
+  unlockedWhat: (trophy: string, what: string, reward: string | null) => string
   hats: Record<Hat, string>
   pals: Record<Pal, string>
   goldens: Record<'stamp' | 'seal', string>
   /** A progress figure in its unit: a count, days, hours or minutes. */
   amount: (unit: Unit, value: number) => string
-  unlocked: (trophy: string) => string
   unlockedMany: (count: number) => string
-  brings: (reward: string) => string
   trophiesTitle: string
   trophiesButton: string
   trophiesCount: (got: number, total: number) => string
@@ -347,23 +351,53 @@ const zh: Strings = {
     commits: 'Commit',
     pushes: 'Push',
     tests: '測試通過',
-    green: '連續綠燈',
-    tools: '工具次數',
-    edits: '改過的檔',
+    green: '測試全綠',
+    tools: '工具呼叫',
+    edits: '改檔',
     tidy: '整理記憶',
     helpers: '派出子代理',
     night: '夜貓子',
     dawn: '早起的鳥',
-    marathon: '單日馬拉松',
-    longTurn: '超長回合',
+    marathon: '工作馬拉松',
+    longTurn: '長回合',
     busyDay: '最忙的一天',
-    pets: '被摸摸',
+    pets: '摸摸 Clawd',
     prs: 'PR 合併',
     scenes: '環遊四景',
     holidays: '節日也上工',
     comeback: '逆轉勝',
     eggs: '稀有景象',
   },
+  familyWhat: {
+    streak: t => `連續 ${t}都有開工`,
+    days: t => `累計 ${t}有開工`,
+    commits: t => `累計 commit ${t} 次`,
+    pushes: t => `累計 push ${t} 次`,
+    tests: t => `測試累計通過 ${t} 次`,
+    green: t => `測試連續通過 ${t} 次，中間沒有失敗`,
+    tools: t => `Claude 累計用了 ${t} 次工具`,
+    edits: t => `累計改了 ${t} 次檔案`,
+    tidy: t => `對話被壓縮（整理記憶）${t} 次`,
+    helpers: t => `累計派出 ${t} 個子代理`,
+    night: t => `在半夜 0 點到 5 點開始了 ${t} 個回合`,
+    dawn: t => `在早上 5 點到 7 點開始了 ${t} 個回合`,
+    marathon: t => `一天之內工作滿 ${t}`,
+    longTurn: t => `單一回合跑了 ${t}`,
+    busyDay: t => `一天之內用了 ${t} 次工具`,
+    pets: t => `摸了 Clawd ${t} 次`,
+    prs: t => `合併了 ${t} 個 PR`,
+    scenes: t => `${t} 個場景都住過`,
+    holidays: t => `在 ${t} 個節日工作過（農曆新年、萬聖節、聖誕節）`,
+    comeback: t => `測試連續失敗 3 次以上之後又通過，${t} 次`,
+    eggs: t => `看過 ${t} 種稀有景象（流星，或各場景的訪客）`,
+  },
+  amountLong: (unit, value) => {
+    const n = unit === 'hours' ? Math.floor(value * 10) / 10 : Math.floor(value)
+    return unit === 'days' ? `${n} 天` : unit === 'hours' ? `${n} 小時` : unit === 'minutes' ? `${n} 分鐘` : n.toLocaleString('en')
+  },
+  nextTier: (tier, what, reward) => `下一級（${tier}）：${what}${reward === null ? '' : `，可得${reward}`}`,
+  unlockedWhat: (trophy, what, reward) => `🏆 ${trophy}：${what}${reward === null ? '' : `，獲得${reward}`}`,
+
   hats: { party: '派對帽', crown: '王冠', halo: '光環', wizard: '巫師帽', captain: '船長帽', flower: '小花', explorer: '探險帽', graduation: '學士帽', headphones: '耳機' },
   pals: { cat: '貓咪', owl: '貓頭鷹', crab: '小螃蟹' },
   goldens: { stamp: '金色印章', seal: '金色封蠟' },
@@ -371,9 +405,7 @@ const zh: Strings = {
     const n = unit === 'hours' ? Math.floor(value * 10) / 10 : Math.floor(value)
     return unit === 'days' ? `${n} 天` : unit === 'hours' ? `${n} 小時` : unit === 'minutes' ? `${n} 分` : n.toLocaleString('en')
   },
-  unlocked: trophy => `🏆 解鎖成就：${trophy}`,
   unlockedMany: count => `🏆 解鎖了 ${count} 個成就！打 /clawd trophies 看看`,
-  brings: reward => `，獲得${reward}`,
   trophiesTitle: '成就',
   trophiesButton: '成就',
   trophiesCount: (got, total) => `已解鎖 ${got} / ${total}`,
@@ -600,7 +632,7 @@ const en: Strings = {
     commits: 'Commits',
     pushes: 'Pushes',
     tests: 'Tests passed',
-    green: 'Green run',
+    green: 'All green',
     tools: 'Tool calls',
     edits: 'Files edited',
     tidy: 'Tidy-ups',
@@ -617,6 +649,39 @@ const en: Strings = {
     comeback: 'Comeback',
     eggs: 'Rare sights',
   },
+  familyWhat: {
+    streak: t => `Work on ${t} in a row`,
+    days: t => `Work on ${t} in all`,
+    commits: t => `Make ${t} commits`,
+    pushes: t => `Push ${t} times`,
+    tests: t => `Pass ${t} test runs`,
+    green: t => `Pass ${t} test runs in a row, with no failure between`,
+    tools: t => `Have Claude make ${t} tool calls`,
+    edits: t => `Edit files ${t} times`,
+    tidy: t => `Have the conversation compacted ${t} times`,
+    helpers: t => `Send out ${t} subagents`,
+    night: t => `Start ${t} turns between midnight and 5 a.m.`,
+    dawn: t => `Start ${t} turns between 5 and 7 a.m.`,
+    marathon: t => `Work ${t} in a single day`,
+    longTurn: t => `Have one turn run for ${t}`,
+    busyDay: t => `Make ${t} tool calls in a single day`,
+    pets: t => `Pet Clawd ${t} times`,
+    prs: t => `Merge ${t} pull requests`,
+    scenes: t => `Live in all ${t} scenes`,
+    holidays: t => `Work through ${t} holidays (Lunar New Year, Halloween, Christmas)`,
+    comeback: t => `Pass a test run after three or more failures in a row, ${t} times`,
+    eggs: t => `See ${t} kinds of rare sight (a shooting star, or a scene's visitor)`,
+  },
+  amountLong: (unit, value) => {
+    const n = unit === 'hours' ? Math.floor(value * 10) / 10 : Math.floor(value)
+    if (unit === 'days') return n === 1 ? '1 day' : `${n} days`
+    if (unit === 'hours') return n === 1 ? '1 hour' : `${n} hours`
+    if (unit === 'minutes') return n === 1 ? '1 minute' : `${n} minutes`
+    return n.toLocaleString('en')
+  },
+  nextTier: (tier, what, reward) => `Next (${tier}): ${what}${reward === null ? '' : `, for a ${reward}`}`,
+  unlockedWhat: (trophy, what, reward) => `🏆 ${trophy}: ${what}${reward === null ? '' : `, and a ${reward}`}`,
+
   hats: { party: 'party hat', crown: 'crown', halo: 'halo', wizard: 'wizard hat', captain: "captain's cap", flower: 'flower', explorer: "explorer's hat", graduation: 'mortarboard', headphones: 'headphones' },
   pals: { cat: 'cat', owl: 'owl', crab: 'little crab' },
   goldens: { stamp: 'golden stamp', seal: 'golden seal' },
@@ -624,9 +689,7 @@ const en: Strings = {
     const n = unit === 'hours' ? Math.floor(value * 10) / 10 : Math.floor(value)
     return unit === 'days' ? `${n} d` : unit === 'hours' ? `${n} h` : unit === 'minutes' ? `${n} min` : n.toLocaleString('en')
   },
-  unlocked: trophy => `🏆 Trophy: ${trophy}`,
   unlockedMany: count => `🏆 ${count} trophies unlocked! See them with /clawd trophies`,
-  brings: reward => `, and a ${reward}`,
   trophiesTitle: 'Trophies',
   trophiesButton: 'Trophies',
   trophiesCount: (got, total) => `${got} of ${total} unlocked`,

@@ -401,10 +401,12 @@ async function checkTrophies($: Engine, life: Life): Promise<void> {
     return
   }
   const [family, tier] = (fresh[0] ?? '').split(':') as [FamilyId, Tier]
-  const spec = FAMILIES.find(f => f.id === family)?.tiers.find(t => t.tier === tier)
-  const reward = spec?.reward === undefined ? '' : 'hat' in spec.reward ? w.hats[spec.reward.hat] : 'pal' in spec.reward ? w.pals[spec.reward.pal] : w.goldens[spec.reward.golden]
+  const kind = FAMILIES.find(f => f.id === family)
+  const spec = kind?.tiers.find(t => t.tier === tier)
+  const reward = spec?.reward === undefined ? null : 'hat' in spec.reward ? w.hats[spec.reward.hat] : 'pal' in spec.reward ? w.pals[spec.reward.pal] : w.goldens[spec.reward.golden]
   const name = `${w.families[family]}・${w.tiers[tier]}`
-  $.ui.toast(`${w.unlocked(name)}${reward === '' ? '' : w.brings(reward)}`, { timeoutMs: 8000 })
+  const what = kind === undefined || spec === undefined ? '' : w.familyWhat[family](w.amountLong(kind.unit, spec.target))
+  $.ui.toast(w.unlockedWhat(name, what, reward), { timeoutMs: 10_000 })
   await flash($, 'cheer', `🏆 ${name}`, 3500, () => settle($))
 }
 
@@ -1156,20 +1158,24 @@ export const register: Register = (on, options) => {
             const { tier, next } = standing(family, trophies.unlocked)
             const value = family.progress(life)
             const filled = next === null ? 10 : Math.min(10, Math.floor((10 * value) / next.target))
+            const target = next ?? family.tiers[family.tiers.length - 1]!
             return (
-              <Box key={family.id} flexDirection="row" gap={1}>
-                <Text color={tier === null ? undefined : TIER_COLOR[tier]} dimColor={tier === null}>
-                  {tier === null ? '○' : '●'}
-                </Text>
-                <Text>{w.families[family.id]}</Text>
-                <Text color={tier === null ? undefined : TIER_COLOR[tier]} dimColor={tier === null}>
-                  {tier === null ? '—' : w.tiers[tier]}
-                </Text>
-                <Text color={ORANGE}>{'▰'.repeat(filled) + '▱'.repeat(10 - filled)}</Text>
+              <Box key={family.id} flexDirection="column">
+                <Box flexDirection="row" gap={1}>
+                  <Text color={tier === null ? undefined : TIER_COLOR[tier]} dimColor={tier === null}>
+                    {tier === null ? '○' : '●'}
+                  </Text>
+                  <Text bold>{w.families[family.id]}</Text>
+                  <Text color={tier === null ? undefined : TIER_COLOR[tier]} dimColor={tier === null}>
+                    {tier === null ? '—' : w.tiers[tier]}
+                  </Text>
+                  <Text color={ORANGE}>{'▰'.repeat(filled) + '▱'.repeat(10 - filled)}</Text>
+                  <Text dimColor>{w.trophyNext(w.amount(family.unit, value), w.amount(family.unit, target.target))}</Text>
+                </Box>
                 <Text dimColor>
                   {next === null
-                    ? w.trophyMax
-                    : `${w.trophyNext(w.amount(family.unit, value), w.amount(family.unit, next.target))} → ${w.tiers[next.tier]}${next.reward === undefined ? '' : `（${rewardName(next.reward)}）`}`}
+                    ? `  ${w.trophyMax} ${w.familyWhat[family.id](w.amountLong(family.unit, target.target))}`
+                    : `  ${w.nextTier(w.tiers[next.tier], w.familyWhat[family.id](w.amountLong(family.unit, next.target)), next.reward === undefined ? null : rewardName(next.reward))}`}
                 </Text>
               </Box>
             )

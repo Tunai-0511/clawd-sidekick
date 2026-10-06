@@ -68,22 +68,22 @@
 | Commits | Commits | 1 | 100 | 1,000 + golden stamp | 5,000 |
 | Pushes | Pushes | 1 | 50 | 500 + golden seal | 2,000 |
 | Tests passed | Test runs passed | 1 | 100 | 1,000 + mortarboard | 10,000 |
-| Green run | Test runs passed in a row | 5 | 25 | 100 | 500 |
+| All green | Test runs passed in a row, with no failure between | 5 | 25 | 100 | 500 |
 | Tool calls | Tool calls | 1,000 | 10,000 | 100,000 + headphones | 1,000,000 |
 | Files edited | Files edited | 100 | 1,000 | 10,000 | 50,000 |
-| Tidy-ups | Conversations compacted | 1 | 10 | 50 + wizard hat | 200 |
+| Tidy-ups | Times the conversation was compacted | 1 | 10 | 50 + wizard hat | 200 |
 | Subagents sent | Subagents sent out | 10 | 100 | 1,000 + captain's cap | 5,000 |
-| Night owl | Turns begun between midnight and 5 | 1 | 25 | 100 + owl | 500 |
-| Early bird | Turns begun between 5 and 7 in the morning | 1 | 25 | 100 + flower | 300 |
-| Marathon day | Most work in one day | 4 h | 8 h | 12 h | 16 h |
+| Night owl | Turns begun between midnight and 5 a.m. | 1 | 25 | 100 + owl | 500 |
+| Early bird | Turns begun between 5 and 7 a.m. | 1 | 25 | 100 + flower | 300 |
+| Marathon day | Most work in a single day | 4 h | 8 h | 12 h | 16 h |
 | Long haul | Longest single turn | 10 min | 30 min | 60 min | 180 min |
 | Busiest day | Most tool calls in one day | 300 | 1,000 | 3,000 | 10,000 |
-| Pets | Times Clawd was petted | 10 | 100 | 1,000 + little crab | 10,000 |
+| Pets | Times you petted Clawd | 10 | 100 | 1,000 + little crab | 10,000 |
 | PRs merged | Pull requests merged | 1 | 25 | 100 | 500 |
 | Globetrotter | Scenes lived in | — | 4 + explorer's hat | — | — |
 | Holiday shift | Holidays worked through (Lunar New Year, Halloween, Christmas) | 1 | 2 | 3 | — |
 | Rare sights | Rare sights seen (a shooting star, each scene’s visitor) | 1 | 3 | 5 | — |
-| Comeback | Passing after three or more failures in a row | 1 | 10 | 50 | — |
+| Comeback | Passing a test run after three or more failures in a row | 1 | 10 | 50 | — |
 
 </details>
 
