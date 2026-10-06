@@ -7,17 +7,18 @@
 // root keeps the surface's frame transparent.
 
 import { say } from './i18n'
+import { THEMES } from './themes'
 import {
   actorTip,
   actorX,
-  ARCADE_BOX,
+  blankets,
   BOARD,
   blank,
   CALENDAR,
   drawBackground,
+  gameRoom,
   drawClawd,
   isNervous,
-  LAMP,
   playOf,
   playPose,
   ROOMS,
@@ -27,6 +28,7 @@ import {
   STEP,
   SW,
   type Box,
+  type Doing,
   type Grid,
   type Play,
   type SceneActor,
@@ -63,13 +65,14 @@ function paths(grid: Grid, box: Box = FULL, keep: (i: number) => boolean = () =>
 }
 
 /**
- * Frames over an opaque `box` that the still house already shows at tick 0:
- * each frame paints only the pixels where it differs from that.
+ * Frames over an opaque `box` that the still scene already shows at tick 0:
+ * each frame paints only the pixels where it differs from that, and only
+ * those `keep` lets through.
  */
-function overStill(frames: readonly Grid[], box: Box): string {
+function overStill(frames: readonly Grid[], box: Box, keep: (i: number) => boolean = () => true): string {
   const first = frames[0]
   if (first === undefined) return ''
-  const marks = frames.map(g => paths(g, box, i => g[i] !== first[i]))
+  const marks = frames.map(g => paths(g, box, i => g[i] !== first[i] && keep(i)))
   return new Set(marks).size > 1 ? flipbook(marks) : ''
 }
 
@@ -97,42 +100,67 @@ function flipbook(frames: readonly string[]): string {
     .join('')
 }
 
-/** The moving parts of the house, each a box and how many ticks it loops over. */
-const PARTS: readonly (Box & { ticks: number })[] = [
-  { x: 77, y: 10, w: 10, h: 6, ticks: 16 },
-  { x: 121, y: 8, w: 10, h: 14, ticks: 16 },
-  { x: 100, y: 16, w: 4, h: 1, ticks: 4 },
-  { x: 141, y: 6, w: 26, h: 9, ticks: 24 },
-  { x: 160, y: 16, w: 7, h: 6, ticks: 18 },
-  { x: 177, y: 9, w: 8, h: 7, ticks: 8 },
-  { x: 186, y: 3, w: 62, h: 22, ticks: 48 },
-  { x: 66, y: 4, w: 9, h: 2, ticks: 4 },
-]
-
+/**
+ * The scene in three layers: everything still at tick 0; the scene's own
+ * moving parts, each looping on its own period; and over them the game being
+ * played, so the scene's periods and the game's never multiply into one long
+ * loop of frames.
+ */
 function house(s: SceneProps, play: Play): string {
+  const art = THEMES[s.theme]
+  const sceneAt = (t: number): Grid => {
+    const g = blank()
+    art.draw(g, t, s, { hasClouds: false, isPlain: false })
+    return g
+  }
+  const scene = sceneAt(0)
   const still = blank()
   drawBackground(still, 0, s, play, { hasClouds: false })
-  const moving = PARTS.map(part => {
+  const isBare = (i: number): boolean => still[i] === scene[i]
+  const moving = art.parts.map(part => {
     const frames: Grid[] = []
-    for (let t = 0; t < part.ticks; t++) {
-      const g = blank()
-      drawBackground(g, t, s, play, { hasClouds: false })
-      frames.push(g)
-    }
-    return overStill(frames, part)
+    for (let t = 0; t < part.ticks; t++) frames.push(sceneAt(t))
+    return overStill(frames, part, isBare)
   })
-  return paths(still) + moving.join('')
+  const games: Grid[] = []
+  for (let t = 0; t < LOOP; t++) {
+    const g = scene.slice()
+    gameRoom(g, t, play)
+    games.push(g)
+  }
+  return paths(still) + moving.join('') + overStill(games, { x: 174, y: 0, w: SW - 174, h: SH })
 }
 
-/** Clouds drift across the window on their own, clipped to the glass. */
+/** The sleepers' blankets, over the sleepers. */
+function covers(s: SceneProps, play: Play, now: number): string {
+  const g = blank()
+  blankets(g, play, s, now + 60_000)
+  return paths(g)
+}
+
+/** Clouds drift on their own: across the house's window, or the whole sky outdoors. */
 function clouds(s: SceneProps): string {
-  if (s.time === 'night') return ''
+  const sky = THEMES[s.theme].sky
+  if (sky === null || s.time === 'night') return ''
   const fill = s.time === 'dusk' ? '#FBD3C0' : '#FFFFFF'
+  if (s.theme === 'house') {
+    return (
+      '<clipPath id="glass"><rect x="141" y="6" width="12" height="4"/><rect x="154" y="6" width="13" height="4"/><rect x="141" y="11" width="12" height="4"/><rect x="154" y="11" width="13" height="4"/></clipPath>' +
+      `<g clip-path="url(#glass)" fill="${fill}">` +
+      '<g><animateTransform attributeName="transform" type="translate" from="-12 0" to="30 0" dur="17s" repeatCount="indefinite"/><path d="M141 8h6v1h-6zM142 7h3v1h-3z"/></g>' +
+      '<g><animateTransform attributeName="transform" type="translate" from="-20 0" to="30 0" dur="23s" begin="-9s" repeatCount="indefinite"/><path d="M146 12h5v1h-5zM147 11h2v1h-2z"/></g>' +
+      '</g>'
+    )
+  }
+  const rows = sky.h > 13 ? [4, 7, 10] : [3, 6]
   return (
-    '<clipPath id="glass"><rect x="141" y="6" width="12" height="4"/><rect x="154" y="6" width="13" height="4"/><rect x="141" y="11" width="12" height="4"/><rect x="154" y="11" width="13" height="4"/></clipPath>' +
-    `<g clip-path="url(#glass)" fill="${fill}">` +
-    '<g><animateTransform attributeName="transform" type="translate" from="-12 0" to="30 0" dur="17s" repeatCount="indefinite"/><path d="M141 8h6v1h-6zM142 7h3v1h-3z"/></g>' +
-    '<g><animateTransform attributeName="transform" type="translate" from="-20 0" to="30 0" dur="23s" begin="-9s" repeatCount="indefinite"/><path d="M146 12h5v1h-5zM147 11h2v1h-2z"/></g>' +
+    `<clipPath id="sky"><rect x="${sky.x}" y="${sky.y}" width="${sky.w}" height="${sky.h}"/></clipPath><g clip-path="url(#sky)" fill="${fill}">` +
+    rows
+      .map(
+        (y, i) =>
+          `<g><animateTransform attributeName="transform" type="translate" from="-20 0" to="${SW + 10} 0" dur="${70 + i * 23}s" begin="-${(i * 37) % 70}s" repeatCount="indefinite"/><path d="M0 ${y}h7v1h-7zM1 ${y - 1}h4v1h-4z"/></g>`,
+      )
+      .join('') +
     '</g>'
   )
 }
@@ -197,10 +225,12 @@ function actor(a: SceneActor, index: number, s: SceneProps, now: number, play: P
 }
 
 function signs(s: SceneProps): string {
-  const names = say(s.lang).rooms
+  const names = say(s.lang).rooms[s.theme]
+  const { fill, stroke, y } = THEMES[s.theme].signs
+  const outline = stroke === 'none' ? '' : ` stroke="${stroke}" stroke-width="0.45" paint-order="stroke"`
   return ROOMS.map(
     room =>
-      `<text x="${room.x + room.w / 2}" y="2.35" font-size="2.1" text-anchor="middle" fill="#F3E3C3" ${FONT} font-weight="600">${escape(names[room.id])}</text>`,
+      `<text x="${room.x + room.w / 2}" y="${y}" font-size="2.1" text-anchor="middle" fill="${fill}"${outline} ${FONT} font-weight="600">${escape(names[room.id])}</text>`,
   ).join('')
 }
 
@@ -209,23 +239,22 @@ const rectOf = (b: Box, attrs = ''): string => `<rect x="${b.x}" y="${b.y}" widt
 /** The hover layer: every room, the board, the calendar, the lamp, the arcade and the window. */
 function hovers(s: SceneProps): string {
   const words = say(s.lang)
-  const rooms = ROOMS.map(
-    room => `<g class="room">${rectOf({ x: room.x, y: 3, w: room.w, h: 22 }, 'class="glass"')}<title>${escape(words.roomTips[room.id])}</title></g>`,
-  ).join('')
+  const art = THEMES[s.theme]
+  const rooms = ROOMS.map(room => {
+    const tip = words.roomTip(words.rooms[s.theme][room.id], words.roomPurpose[room.id])
+    return `<g class="room">${rectOf({ x: room.x, y: 3, w: room.w, h: 22 }, 'class="glass"')}<title>${escape(tip)}</title></g>`
+  }).join('')
   const board = words.boardTitle(s.board)
   const calendar = s.deadline === '' ? words.calendarEmpty : words.calendar(s.deadline)
   const ring = (b: Box): string =>
     rectOf({ x: b.x - 0.5, y: b.y - 0.5, w: b.w + 1, h: b.h + 1 }, 'class="on" fill="none" stroke="#F5C542" stroke-width="0.5"')
-  const glow = '<path class="on" fill="#FCE7A6" fill-opacity="0.85" d="M22 14h9v1h-9zM21 17h11v1h-11zM22 18h9v1h-9zM20 15h4v1h-4zM29 15h4v1h-4z"/>'
-  const hi =
-    '<g class="on"><rect x="177" y="9" width="8" height="6" fill="#2E3138"/><path fill="#F5C542" d="M178 10h1v4h-1zM180 10h1v4h-1zM179 12h1v1h-1zM182 10h1v4h-1z"/><path fill="#E5484D" d="M184 10h1v3h-1zM184 14h1v1h-1z"/></g>'
   return (
     rooms +
     `<g class="spot">${rectOf(BOARD, 'class="glass"')}${ring(BOARD)}<title>${escape(board)}</title></g>` +
     `<g class="spot">${rectOf(CALENDAR, 'class="glass"')}${ring(CALENDAR)}<title>${escape(calendar)}</title></g>` +
-    `<g class="spot">${rectOf(LAMP, 'class="glass"')}${glow}<title>${escape(words.lamp)}</title></g>` +
-    `<g class="spot">${rectOf(ARCADE_BOX, 'class="glass"')}${hi}<title>${escape(words.arcade)}</title></g>` +
-    `<g class="spot">${rectOf({ x: 140, y: 5, w: 28, h: 11 }, 'class="glass"')}<title>${escape(words.outside[s.time])}</title></g>`
+    `<g class="spot">${rectOf(art.light.box, 'class="glass"')}${art.light.glow}<title>${escape(words.lights[s.theme])}</title></g>` +
+    `<g class="spot">${rectOf(art.toy.box, 'class="glass"')}${art.toy.hi}<title>${escape(words.toys[s.theme])}</title></g>` +
+    `<g class="spot">${rectOf({ x: 140, y: 5, w: 28, h: 11 }, 'class="glass"')}<title>${escape(s.theme === 'space' ? words.outsideSpace : words.outside[s.time])}</title></g>`
   )
 }
 
@@ -254,6 +283,22 @@ export function sceneSvg(s: SceneProps, now: number): string {
     `<g class="art">${house(s, play)}${clouds(s)}${signs(s)}</g>` +
     hovers(s) +
     order.map(({ a, i }) => actor(a, i, s, now, play)).join('') +
+    covers(s, play, now) +
     '</svg>'
+  )
+}
+
+/** One small Clawd on his own, for the spinner and the folded band: transparent, filling its box. */
+export function miniClawdSvg(doing: Doing): string {
+  const box: Box = { x: REF - 3, y: 9, w: 24, h: 16 }
+  const frames: Grid[] = []
+  for (let t = 0; t < LOOP; t++) {
+    const g = blank()
+    drawClawd(g, REF, t, doing, null)
+    frames.push(g)
+  }
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${box.x} ${box.y} ${box.w} ${box.h}" width="100%" height="100%" shape-rendering="crispEdges">` +
+    `<style>:root{color-scheme:light dark;background:transparent}</style>${layered(frames, box)}</svg>`
   )
 }

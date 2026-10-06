@@ -1,8 +1,8 @@
 {
   "name": "clawd-sidekick",
   "displayName": "Clawd Sidekick",
-  "version": "0.4.0",
-  "description": "Clawd's pixel house above your prompt: Clawd walks to the room of whatever Claude is doing while his crew plays volleyball, ping-pong, jump rope or blocks (and sleeps at night). Live usage figures, the to-dos Claude hands you, and a deadline radar. English and 繁體中文.",
+  "version": "0.5.0",
+  "description": "Clawd's pixel world above your prompt, in four scenes (house, beach, space station, forest camp): Clawd walks to the zone of whatever Claude is doing while his crew plays volleyball, ping-pong, jump rope or blocks, and sleeps at night. A Clawd spinner, live usage figures, the to-dos Claude hands you, and a deadline radar. English and 繁體中文.",
   "author": {
     "name": "Tunai"
   },

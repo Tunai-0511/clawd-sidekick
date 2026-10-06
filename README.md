@@ -18,6 +18,15 @@
 | Lookout | searches or fetches the web (the window follows your local time: day, dusk, starry night) |
 | Game room | is idle: the crew lives here |
 
+**Four scenes.** Switch them with the **Scene** button on the band, or with `/clawd scene beach`. Every scene keeps the same five zones, so Clawd and the crew behave the same anywhere:
+
+- **House**: library, workshop, server room, lookout, game room
+- **Beach**: umbrella, beach desk, lifeguard tower, lighthouse view, beach court with a sandcastle
+- **Space station**: archive pod, lab, reactor, observatory, rec deck
+- **Forest camp**: tent, log desk, radio hut, treehouse, campfire
+
+![The four scenes: the house, the beach at dusk, the space station, the forest camp at night](./docs/scenes.png)
+
 **The crew.** Three Clawds in blue, green and purple beanies:
 
 - play **volleyball** while Claude works
@@ -27,7 +36,9 @@
 
 ![The game room: ping-pong and arcade, jump rope at dusk, a block tower, everyone asleep at night](./docs/game-room.png)
 
-**Hover everything.** In the Desktop app, a Clawd under the pointer hops and shows hearts, and his tooltip says what he's doing. The board lists your to-dos, the calendar names the deadline, the lamp switches on and the arcade says hi. In the terminal, the line under the house tells you what's under the pointer, and a click pets that Clawd.
+**Hover everything.** In the Desktop app, a Clawd under the pointer hops and shows hearts, and his tooltip says what he's doing. The board lists your to-dos and the calendar names the deadline. Each scene's light switches on, and its toy says hi: the arcade, a crab peeking out of the sandcastle, or sparks from the campfire. In the terminal, the line under the house tells you what's under the pointer, and a click pets that Clawd.
+
+**A Clawd spinner.** The `Thinking…` line becomes a small Clawd who thinks in dots or taps his feet while a tool runs, beside a clock that counts every second.
 
 **Live figures** under the house: model, context fill, 5-hour and 7-day plan usage, session cost, the turn timer, and this turn's tool calls, edits and commands. Each turns yellow past 50% and red past 80%.
 
@@ -59,6 +70,7 @@ Run `/reload-plugins` in an open session, or start a new one.
 | Command | What it does |
 | --- | --- |
 | `/clawd` | Open the Clawd Sidekick pane: big Clawd, your full to-do list, all deadlines |
+| `/clawd scene house` · `beach` · `space` · `forest` · `next` | Move the Clawds to another scene |
 | `/clawd hide` · `/clawd show` | Fold the band to one line, or unfold it |
 | `/clawd lang en` · `zh` · `auto` | Switch language (`auto` follows the system) |
 | `/todo` | List your to-dos; also `add <text>`, `done N`, `undo`, `rm N`, `clear` |
@@ -80,14 +92,14 @@ A mod runs with your permissions, so here is everything this one reaches (`claud
 
 - **Model calls**: only after a turn whose reply looks like it hands you something ("you'll need to…", "please upload…"), one short call to `todoModel`. Nothing else calls a model.
 - **Processes**: `date +%z` once at start, for your time zone; `defaults read -g AppleLanguages` once, on macOS, when the language is `auto` and no `LANG` is set.
-- **Storage**: your to-dos, deadlines, language and pet count, in the plugin's own store on your machine.
+- **Storage**: your to-dos, deadlines, scene, language and pet count, in the plugin's own store on your machine.
 - **Environment**: reads `LANG`, `LC_ALL` and `LC_MESSAGES`.
 - **No network.**
 
 ## How it works
 
-- `hooks/scene.ts` draws the house procedurally: 256 × 28 pixels, the crew's places in each game, and what the pointer finds.
-- **Desktop app**: `hooks/scene-svg.ts` turns it into one interactive SVG. The static house is drawn once. Each moving part loops as a SMIL flipbook of only the pixels that change. Walking is `animateTransform`, and hovering is CSS `:hover` and `<title>`. `color-scheme: light dark` on the root keeps the frame transparent on any theme.
+- `hooks/themes.ts` draws the four scenes procedurally on a 256 × 28 canvas (`hooks/pixels.ts`). `hooks/scene.ts` adds the Clawds, the crew's places in each game, and what the pointer finds.
+- **Desktop app**: `hooks/scene-svg.ts` turns it into one interactive SVG in three layers. The still scene is drawn once. Each of the scene's moving parts loops as a SMIL flipbook of only the pixels that change, and the game being played is a layer of its own, so their periods never multiply. Walking is `animateTransform`, and hovering is CSS `:hover` and `<title>`. `color-scheme: light dark` on the root keeps the frame transparent on any theme.
 - **Terminal**: `hooks/scene-client.tsx` is a `Client` surface module with its own frame clock. It draws two pixels per cell with `▀`, and its camera follows Clawd across a crop of up to 150 columns.
 - `hooks/i18n.ts` holds every string in both languages.
 

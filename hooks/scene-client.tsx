@@ -7,7 +7,7 @@
 import type { ClientModule, RenderElement } from 'claude-code'
 
 import { say, type Lang } from './i18n'
-import { actorX, composeScene, hitTest, ROOMS, SCENE_PALETTE, SH, STEP, SW, tipOf, type Hit, type SceneProps } from './scene'
+import { actorX, composeScene, hitTest, ROOMS, SCENE_PALETTE, SH, STEP, SW, tipOf, type Hit, type SceneProps, type Theme } from './scene'
 
 type Live = { t: number; hover?: Hit }
 
@@ -33,8 +33,8 @@ const isSame = (a: Cell, b: Cell): boolean =>
 const cellsOf = (text: string): number => [...text].reduce((n, ch) => n + ((ch.codePointAt(0) ?? 0) > 0x2e80 ? 2 : 1), 0)
 
 /** The room names under the house, each centred on its room within the crop. */
-function signs(left: number, columns: number, lang: Lang): string {
-  const names = say(lang).rooms
+function signs(left: number, columns: number, lang: Lang, theme: Theme): string {
+  const names = say(lang).rooms[theme]
   let line = ''
   for (const room of ROOMS) {
     const name = names[room.id]
@@ -103,7 +103,7 @@ const SceneClient: ClientModule<SceneProps, Live> = (props, surface) => {
       {rows}
       {hover === undefined ? (
         <Text dimColor wrap="truncate">
-          {signs(left, columns, props.lang)}
+          {signs(left, columns, props.lang, props.theme)}
         </Text>
       ) : (
         <Text color="#F5C542" wrap="truncate">

@@ -8,103 +8,18 @@
 // Pure drawing: the terminal client composes frames from it at its own frame
 // rate, and scene-svg.ts turns the same frames into an animated SVG.
 
-import type { Doing, Game, SceneActor, SceneProps, TimeOfDay } from '../types'
+import type { Doing, Game, SceneActor, SceneProps, Theme, TimeOfDay } from '../types'
 import { say, type Lang, type RoomId } from './i18n'
+import { blank, C, FEET, FLOOR, px, rect, type Box, type Grid } from './pixels'
+import { THEMES } from './themes'
 
-export type { Doing, Game, SceneActor, SceneProps, TimeOfDay }
+export type { Doing, Game, SceneActor, SceneProps, Theme, TimeOfDay }
+export { blank, SCENE_PALETTE, SH, STEP, SW, type Box, type Grid } from './pixels'
 
-export const SW = 256
-export const SH = 28
-/** Milliseconds a tick, eight frames a second. */
-export const STEP = 125
 /** How fast a Clawd walks, in pixels a second. */
 export const SPEED = 30
 
-const HEX = {
-  roofEdge: '#4A2616',
-  roof: '#8C4A2B',
-  roofTile: '#A65A34',
-  beam: '#5E3420',
-  wall: '#F3E3C3',
-  wallLine: '#E6D2AC',
-  wallBlue: '#E4ECF2',
-  wallBlueLine: '#D3DEE7',
-  wallSlate: '#3B4250',
-  wallSlateLine: '#343A47',
-  wallSky: '#DDF0F7',
-  wallSkyLine: '#CBE6F0',
-  wallLilac: '#EADCF5',
-  wallLilacLine: '#DCCAEC',
-  wains: '#6E4630',
-  wainsDark: '#8C5A3C',
-  floorHi: '#C07A48',
-  floor: '#A8693F',
-  floorDark: '#6B3A22',
-  wood: '#7A4A2E',
-  woodLight: '#9C6238',
-  body: '#D97757',
-  shade: '#B4553A',
-  highlight: '#EE9A78',
-  eye: '#2A1A15',
-  white: '#FFFFFF',
-  pink: '#F6A5B8',
-  red: '#E5484D',
-  blue: '#4D8DF6',
-  green: '#4CB363',
-  purple: '#A98BF5',
-  yellow: '#F5C542',
-  sky: '#8ECDF5',
-  dark: '#2E3138',
-  screen: '#14201B',
-  code: '#6EE7A0',
-  steel: '#3A3F47',
-  gray: '#8A8F98',
-  light: '#C9CDD3',
-  cork: '#B07A44',
-  beige: '#D9CBB0',
-  table: '#2F7D57',
-  arcade: '#5B3FA8',
-  sweat: '#7CC6F2',
-  pageNear: '#FCE7A6',
-  pageUrgent: '#F7B0B0',
-  duskTop: '#E8836B',
-  duskMid: '#F2A65A',
-  duskLow: '#F6C77A',
-  sunset: '#F0703C',
-  night: '#1E2A4A',
-  moon: '#F4E8B0',
-  net: '#E8E8E8',
-} as const
-
-type Color = keyof typeof HEX
-
-const NAMES = Object.keys(HEX) as Color[]
-
-/** Palette index 0 is transparent; the rest follow HEX's order. */
-export const SCENE_PALETTE: readonly string[] = ['', ...NAMES.map(name => HEX[name])]
-
-const C = Object.fromEntries(NAMES.map((name, i) => [name, i + 1])) as Record<Color, number>
-
-export type Grid = Uint8Array
-
-export const blank = (): Grid => new Uint8Array(SW * SH)
-
-function px(g: Grid, x: number, y: number, c: number): void {
-  if (x >= 0 && x < SW && y >= 0 && y < SH) g[y * SW + x] = c
-}
-
-function rect(g: Grid, x: number, y: number, w: number, h: number, c: number): void {
-  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) px(g, x + i, y + j, c)
-}
-
-const hash = (n: number): number => {
-  let x = (n ^ 0x9e3779b9) >>> 0
-  x = Math.imul(x ^ (x >>> 16), 0x85ebca6b) >>> 0
-  x = Math.imul(x ^ (x >>> 13), 0xc2b2ae35) >>> 0
-  return (x ^ (x >>> 16)) >>> 0
-}
-
-// ── The house ──────────────────────────────────────────────────────────────
+// ── The zones every scene keeps ───────────────────────────────────────────
 
 export const ROOMS = [
   { id: 'library', x: 2, w: 42 },
@@ -127,186 +42,6 @@ export const SPOT_X = {
 } as const
 
 export type Spot = keyof typeof SPOT_X
-
-const FLOOR = 25
-const FEET = FLOOR - 1
-
-const DIGITS = ['111101101101111', '010110010010111', '111001111100111', '111001111001111', '101101111001001', '111100111001111', '111100111101111', '111001010010010', '111101111101111', '111101111001111']
-
-function digit(g: Grid, x: number, y: number, d: number, c: number): void {
-  const bits = DIGITS[d] ?? ''
-  for (let i = 0; i < 15; i++) if (bits[i] === '1') px(g, x + (i % 3), y + Math.floor(i / 3), c)
-}
-
-function shell(g: Grid, isPlain: boolean): void {
-  rect(g, 0, 0, SW, 1, C.roofEdge)
-  rect(g, 0, 1, SW, 1, C.roof)
-  if (!isPlain) for (let x = 0; x < SW; x += 4) px(g, x + 1, 1, C.roofTile)
-  rect(g, 0, 2, SW, 1, C.beam)
-  const tints: readonly (readonly [number, number])[] = [
-    [C.wall, C.wallLine],
-    [C.wallBlue, C.wallBlueLine],
-    [C.wallSlate, C.wallSlateLine],
-    [C.wallSky, C.wallSkyLine],
-    [C.wallLilac, C.wallLilacLine],
-  ]
-  ROOMS.forEach((room, i) => {
-    const [wall, line] = tints[i] ?? [C.wall, C.wallLine]
-    rect(g, room.x, 3, room.w, 15, wall)
-    if (!isPlain) for (let x = room.x + 4; x < room.x + room.w; x += 12) rect(g, x, 3, 1, 15, line)
-  })
-  rect(g, 0, 18, SW, 7, C.wains)
-  rect(g, 0, 18, SW, 1, C.wainsDark)
-  rect(g, 0, FLOOR, SW, 1, C.floorHi)
-  rect(g, 0, FLOOR + 1, SW, 1, C.floor)
-  if (!isPlain) for (let x = 5; x < SW; x += 11) px(g, x, FLOOR + 1, C.floorDark)
-  rect(g, 0, FLOOR + 2, SW, 1, C.floorDark)
-  rect(g, 0, 3, 2, 22, C.wood)
-  rect(g, SW - 2, 3, 2, 22, C.wood)
-  for (const room of ROOMS.slice(1)) {
-    rect(g, room.x - 2, 3, 2, 10, C.wood)
-    rect(g, room.x - 3, 12, 4, 1, C.beam)
-  }
-}
-
-function library(g: Grid, s: SceneProps): void {
-  for (const sx of [3, 30]) {
-    rect(g, sx, 5, 12, 20, C.wood)
-    for (const shelf of [5, 10, 15, 20]) {
-      const top = shelf + 1
-      rect(g, sx + 1, top, 10, shelf === 20 ? 3 : 4, C.woodLight)
-      let bx = sx + 1
-      while (bx < sx + 11) {
-        const h = hash(bx * 31 + shelf)
-        const width = 1 + (h % 2)
-        const tall = (shelf === 20 ? 3 : 4) - ((h >> 3) % 2)
-        const color = [C.red, C.blue, C.green, C.yellow, C.purple, C.beige][(h >> 5) % 6] ?? C.red
-        rect(g, bx, top + (shelf === 20 ? 3 : 4) - tall, Math.min(width, sx + 11 - bx), tall, color)
-        bx += width + ((h >> 8) % 3 === 0 ? 1 : 0)
-      }
-    }
-  }
-  rect(g, 18, 19, 11, 2, C.woodLight)
-  rect(g, 18, 21, 1, 4, C.wood)
-  rect(g, 28, 21, 1, 4, C.wood)
-  if (s.time === 'night') {
-    rect(g, 22, 14, 9, 1, C.pageNear)
-    rect(g, 21, 17, 11, 1, C.pageNear)
-    rect(g, 22, 18, 9, 1, C.pageNear)
-  }
-  rect(g, 25, 15, 3, 1, C.yellow)
-  rect(g, 24, 16, 5, 1, C.yellow)
-  rect(g, 26, 17, 1, 2, C.gray)
-  rect(g, 20, 18, 4, 1, C.white)
-}
-
-function codelab(g: Grid, t: number, s: SceneProps): void {
-  rect(g, 48, 5, 16, 9, C.wood)
-  rect(g, 49, 6, 14, 7, C.cork)
-  const colors = [C.yellow, C.pink, C.green, C.sky]
-  for (let i = 0; i < Math.min(8, s.todos); i++) {
-    const x = 50 + (i % 4) * 3
-    const y = 7 + Math.floor(i / 4) * 3
-    rect(g, x, y, 2, 2, colors[i % 4] ?? C.yellow)
-    px(g, x, y, C.red)
-  }
-  const page = s.urgency === 'urgent' ? C.pageUrgent : s.urgency === 'near' ? C.pageNear : C.white
-  const isBlinkOff = s.urgency === 'urgent' && t % 4 >= 2
-  rect(g, 66, 4, 9, 2, isBlinkOff ? C.wood : C.red)
-  rect(g, 66, 6, 9, 6, page)
-  if (s.days === null) {
-    rect(g, 67, 8, 3, 1, C.gray)
-    rect(g, 71, 8, 3, 1, C.gray)
-  } else {
-    const days = Math.max(0, Math.min(99, s.days))
-    digit(g, 67, 6, Math.floor(days / 10), C.eye)
-    digit(g, 71, 6, days % 10, C.eye)
-  }
-  rect(g, 70, 18, 21, 2, C.woodLight)
-  rect(g, 71, 20, 1, 5, C.wood)
-  rect(g, 89, 20, 1, 5, C.wood)
-  rect(g, 76, 9, 12, 8, C.dark)
-  rect(g, 77, 10, 10, 6, C.screen)
-  const lengths = [6, 3, 8, 5, 2, 7, 4, 9]
-  const palette = [C.code, C.white, C.purple, C.code]
-  for (let row = 0; row < 3; row++) {
-    const n = (row + Math.floor(t / 2)) % lengths.length
-    rect(g, 78 + (n % 2), 10 + row * 2, lengths[n] ?? 4, 1, palette[n % 4] ?? C.code)
-  }
-  rect(g, 81, 17, 2, 1, C.dark)
-  rect(g, 47, 21, 4, 4, C.shade)
-  rect(g, 46, 18, 6, 3, C.green)
-  px(g, 48, 17, C.green)
-}
-
-function terminal(g: Grid, t: number): void {
-  rect(g, 120, 6, 12, 19, C.steel)
-  for (let slot = 0; slot < 5; slot++) {
-    const y = 8 + slot * 3
-    rect(g, 121, y, 10, 2, C.dark)
-    for (let led = 0; led < 3; led++) {
-      const on = hash(slot * 7 + led + (Math.floor(t / 2) % 8) * 13) % 3 !== 0
-      px(g, 122 + led * 2, y, on ? ([C.code, C.yellow, C.red][led] ?? C.code) : C.gray)
-    }
-  }
-  rect(g, 95, 19, 19, 2, C.woodLight)
-  rect(g, 96, 21, 1, 4, C.wood)
-  rect(g, 112, 21, 1, 4, C.wood)
-  rect(g, 98, 10, 12, 9, C.beige)
-  rect(g, 99, 11, 10, 6, C.screen)
-  rect(g, 100, 12, 6, 1, C.code)
-  rect(g, 100, 14, 4, 1, C.code)
-  px(g, 100, 16, C.code)
-  if (t % 4 < 2) rect(g, 102, 16, 2, 1, C.code)
-}
-
-const STARS: readonly (readonly [number, number])[] = [
-  [143, 7],
-  [147, 12],
-  [150, 8],
-  [156, 7],
-  [159, 13],
-  [165, 12],
-]
-
-function web(g: Grid, t: number, s: SceneProps, hasClouds: boolean): void {
-  rect(g, 140, 5, 28, 11, C.wood)
-  if (s.time === 'night') {
-    rect(g, 141, 6, 26, 9, C.night)
-    rect(g, 162, 7, 3, 3, C.moon)
-    px(g, 162, 7, C.night)
-    px(g, 162, 8, C.night)
-    STARS.forEach(([x, y], i) => {
-      if (hash(i * 11 + (Math.floor(t / 3) % 8)) % 3 !== 0) px(g, x, y, C.white)
-    })
-  } else if (s.time === 'dusk') {
-    rect(g, 141, 6, 26, 3, C.duskTop)
-    rect(g, 141, 9, 26, 3, C.duskMid)
-    rect(g, 141, 12, 26, 3, C.duskLow)
-    rect(g, 161, 11, 4, 2, C.sunset)
-    rect(g, 162, 10, 2, 1, C.sunset)
-  } else {
-    rect(g, 141, 6, 26, 9, C.sky)
-    rect(g, 163, 7, 3, 3, C.yellow)
-  }
-  for (const [phase, y] of hasClouds && s.time !== 'night' ? ([[0, 8], [13, 11]] as const) : []) {
-    const cx = 141 + ((Math.floor(t / 3) + phase) % 30) - 4
-    for (let i = 0; i < 6; i++) if (cx + i > 140 && cx + i < 167) px(g, cx + i, y, C.white)
-    for (let i = 1; i < 4; i++) if (cx + i > 140 && cx + i < 167) px(g, cx + i, y - 1, C.white)
-  }
-  rect(g, 153, 6, 1, 9, C.wood)
-  rect(g, 141, 10, 26, 1, C.wood)
-  const globe = ['..###..', '.#####.', '#######', '#######', '.#####.', '..###..']
-  globe.forEach((row, j) => {
-    for (let i = 0; i < row.length; i++) {
-      if (row[i] !== '#') continue
-      const isLand = (hash(((i + Math.floor(t / 2)) % 9) * 5 + j) & 3) === 0
-      px(g, 160 + i, 16 + j, isLand ? C.green : C.blue)
-    }
-  })
-  rect(g, 163, 22, 1, 2, C.gray)
-  rect(g, 161, 24, 5, 1, C.wood)
-}
 
 // ── The game room ──────────────────────────────────────────────────────────
 
@@ -455,23 +190,8 @@ function tower(g: Grid, t: number): void {
   }
 }
 
-function gameRoom(g: Grid, t: number, play: Play): void {
-  rect(g, 176, 7, 10, 18, C.arcade)
-  rect(g, 177, 9, 8, 6, C.dark)
-  const invader = ['.#..#.', '######', '#.##.#']
-  const hue = [C.code, C.pink, C.yellow, C.sky][Math.floor(t / 2) % 4] ?? C.code
-  invader.forEach((row, j) => {
-    for (let i = 0; i < row.length; i++) if (row[i] === '#') px(g, 178 + i, 10 + j + (t % 4 < 2 ? 0 : 1), hue)
-  })
-  rect(g, 176, 16, 10, 2, C.steel)
-  px(g, 178, 15, C.red)
-  px(g, 182, 16, C.yellow)
-  px(g, 184, 16, C.sky)
-  for (let x = 189; x < 252; x += 5) {
-    const color = [C.red, C.yellow, C.blue, C.green][((x - 189) / 5) % 4] ?? C.red
-    rect(g, x, 4, 3, 1, color)
-    px(g, x + 1, 5, color)
-  }
+/** The games' own things: the table, the net and ball, the rope, the blocks, the mats. */
+export function gameRoom(g: Grid, t: number, play: Play): void {
   switch (play.game) {
     case 'pong': {
       if (!play.slots.some(s => s.role === 'L')) break
@@ -523,7 +243,7 @@ function gameRoom(g: Grid, t: number, play: Play): void {
 }
 
 /** Blankets go over the sleepers, drawn after them. */
-function blankets(g: Grid, play: Play, s: SceneProps, now: number): void {
+export function blankets(g: Grid, play: Play, s: SceneProps, now: number): void {
   if (play.game !== 'sleep') return
   play.slots.forEach((slot, i) => {
     if (!s.actors.some(a => a.toX === slot.x && a.doing === 'sleep' && !isWalking(a, now))) return
@@ -540,14 +260,10 @@ export type BackgroundOptions = {
   isPlain?: boolean
 }
 
-/** Everything but the Clawds at tick `t`. */
+/** Everything but the Clawds at tick `t`: the scene, then the game being played. */
 export function drawBackground(g: Grid, t: number, s: SceneProps, play: Play, options: BackgroundOptions = {}): void {
   const { hasClouds = true, isPlain = false } = options
-  shell(g, isPlain)
-  library(g, s)
-  codelab(g, t, s)
-  terminal(g, t)
-  web(g, t, s, hasClouds)
+  THEMES[s.theme].draw(g, t, s, { hasClouds, isPlain })
   gameRoom(g, t, play)
 }
 
@@ -902,10 +618,6 @@ export function actorTip(a: SceneActor, lang: Lang): string {
 
 export const BOARD: Box = { x: 48, y: 5, w: 16, h: 9 }
 export const CALENDAR: Box = { x: 66, y: 4, w: 9, h: 8 }
-export const LAMP: Box = { x: 23, y: 14, w: 7, h: 5 }
-export const ARCADE_BOX: Box = { x: 176, y: 7, w: 10, h: 18 }
-
-export type Box = { x: number; y: number; w: number; h: number }
 
 const inside = (b: Box, x: number, y: number): boolean => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h
 
@@ -937,7 +649,9 @@ export function tipOf(s: SceneProps, hit: Hit): string {
       return s.board.length === 0 ? words.boardEmpty : words.board(s.board)
     case 'calendar':
       return s.deadline === '' ? words.calendarEmpty : words.calendar(s.deadline)
-    case 'room':
-      return words.roomTips[hit.id as RoomId] ?? ''
+    case 'room': {
+      const id = hit.id as RoomId
+      return words.roomTip(words.rooms[s.theme][id], words.roomPurpose[id])
+    }
   }
 }

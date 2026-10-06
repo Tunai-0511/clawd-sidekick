@@ -69,6 +69,9 @@ export type Doing =
 /** What the crew plays in the game room. */
 export type Game = 'pong' | 'volley' | 'rope' | 'tower' | 'sleep'
 
+/** Where the Clawds live: every scene has the same five zones. */
+export type Theme = 'house' | 'beach' | 'space' | 'forest'
+
 /** The person's time of day, for the window. */
 export type TimeOfDay = 'day' | 'dusk' | 'night'
 
@@ -104,6 +107,7 @@ export type SceneProps = {
   deadline: string
   /** The language the house's signs and tips speak. */
   lang: 'zh' | 'en'
+  theme: Theme
 }
 
 /** The status line figures: model, context, plan windows, cost, this turn. */
@@ -137,6 +141,7 @@ declare module 'claude-code' {
       game: Game
       /** The language Clawd speaks: what the person chose, else the system's. */
       lang: 'zh' | 'en'
+      theme: Theme
     }
   }
 }

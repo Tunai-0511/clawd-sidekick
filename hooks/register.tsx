@@ -10,12 +10,13 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement } from 'claude-code'
 
-import type { Activity, Deadline, Doing, Game, Pose, SceneActor, SceneProps, TimeOfDay, Todo, Usage } from '../types'
+import type { Activity, Deadline, Doing, Game, Pose, SceneActor, SceneProps, Theme, TimeOfDay, Todo, Usage } from '../types'
 import { countdown, formatDue, parseDeadline, parseOffset, urgency, URGENCY_COLOR } from './deadline'
 import { langOf, say, type Lang } from './i18n'
 import { actorX, layoutFor, ROOMS, SH, SPOT_X, SW, type Spot } from './scene'
-import { sceneSvg } from './scene-svg'
+import { miniClawdSvg, sceneSvg } from './scene-svg'
 import { H, W } from './sprite'
+import { THEME_ORDER } from './themes'
 import { clawdSvg } from './svg'
 import { extractPrompt, isDuplicate, newId, ordered, parseList, shouldExtract } from './todo'
 
@@ -36,6 +37,7 @@ const offsetAtom = atom({ plugin: 'clawd-sidekick', key: 'offset' } as const, 48
 const projectAtom = atom({ plugin: 'clawd-sidekick', key: 'project' } as const, '')
 const gameAtom = atom({ plugin: 'clawd-sidekick', key: 'game' } as const, 'pong')
 const langAtom = atom({ plugin: 'clawd-sidekick', key: 'lang' } as const, 'en')
+const themeAtom = atom({ plugin: 'clawd-sidekick', key: 'theme' } as const, 'house')
 
 const home = (id: string, cap: string | null, x: number, doing: Doing): SceneActor => ({ id, cap, fromX: x, toX: x, departAt: 0, doing, label: '' })
 
@@ -302,6 +304,8 @@ async function load($: Engine): Promise<void> {
   const deadlines = await stored<Deadline[]>('deadlines', [])
   const isCollapsed = await stored<boolean>('isCollapsed', false)
   const pets = await stored<number>('pets', 0)
+  const theme = await stored<string>('theme', 'house')
+  await update($, themeAtom, (): Theme => (THEME_ORDER as readonly string[]).includes(theme) ? (theme as Theme) : 'house')
   await update($, todosAtom, () => todos)
   await update($, deadlinesAtom, () => deadlines)
   await update($, collapsedAtom, () => isCollapsed)
@@ -328,6 +332,15 @@ async function changeDeadlines($: Engine, change: (deadlines: Deadline[]) => Dea
 async function setCollapsed($: Engine, isCollapsed: boolean): Promise<void> {
   await $.store.set('isCollapsed', isCollapsed)
   await update($, collapsedAtom, () => isCollapsed)
+}
+
+/** Moves the Clawds to another scene; `next` takes the one after the current. */
+async function setTheme($: Engine, choice: Theme | 'next'): Promise<Theme> {
+  const current = await read($, themeAtom)
+  const theme = choice === 'next' ? (THEME_ORDER[(THEME_ORDER.indexOf(current) + 1) % THEME_ORDER.length] ?? 'house') : choice
+  await $.store.set('theme', theme)
+  await update($, themeAtom, () => theme)
+  return theme
 }
 
 // ── The human's todo list ───────────────────────────────────────────────
@@ -461,7 +474,7 @@ export const register: Register = (on, options) => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
-    const [doing, todos, deadlines, isCollapsed, project, actors, usage, game, offset, talk] = await Promise.all([
+    const [doing, todos, deadlines, isCollapsed, project, actors, usage, game, offset, talk, theme] = await Promise.all([
       read($, activity),
       read($, todosAtom),
       read($, deadlinesAtom),
@@ -472,6 +485,7 @@ export const register: Register = (on, options) => {
       read($, gameAtom),
       read($, offsetAtom),
       read($, langAtom),
+      read($, themeAtom),
       read($, nowAtom),
     ])
     const w = say(talk)
@@ -482,15 +496,28 @@ export const register: Register = (on, options) => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const width = e.props.bodyColumns
 
-    const isCramped = width < 70 || (e.surface === 'terminal' && e.props.maxRows < SH / 2 + 3)
+    // The terminal folds the band when the house cannot fit; the desktop scales it instead.
+    const isCramped = e.surface === 'terminal' && (width < 70 || e.props.maxRows < SH / 2 + 3)
+    const main = actors.find(a => a.cap === null)
+    const langButton = <Button key="lang" label={w.otherLanguage} onPress={() => setLang($, talk === 'zh' ? 'en' : 'zh')} />
     if (isCollapsed || isCramped) {
+      const now_ = doing.label && doing.label !== w.sleepy ? doing.label : w.doings[main?.doing ?? 'idle']
+      const summary = [`Clawd · ${now_}`, open.length > 0 ? w.toDo(open.length) : w.noTodos]
+      if (nearest !== undefined) summary.push(w.due(nearest.title, countdown(nearest.due, now, talk)))
+      let face: RenderElement
+      if (e.surface === 'terminal') {
+        face = <Text color={ORANGE}>▐▛███▜▌</Text>
+      } else {
+        const { Svg } = $.ui.resolve(e)
+        face = <Svg source={miniClawdSvg(main?.doing ?? 'idle')} alt="Clawd" width={36} height={24} />
+      }
       return (
-        <Box flexDirection="row" gap={1}>
-          <Text color={ORANGE}>▐▛▜▌</Text>
-          <Text wrap="truncate-end">
-            {`${doing.label || 'Clawd'} · ${w.toDo(open.length)}${nearest ? ` · ${nearest.title} ${countdown(nearest.due, now, talk)}` : ''}`}
-          </Text>
-          <Button key="expand" label={w.expand} plain dimColor onPress={() => setCollapsed($, false)} />
+        <Box flexDirection="row" gap={1} alignItems="center">
+          {face}
+          <Text wrap="truncate-end">{summary.join(' · ')}</Text>
+          <Box flexGrow={1} />
+          {isCollapsed ? <Button key="expand" label={w.expand} variant="primary" onPress={() => setCollapsed($, false)} /> : null}
+          {e.surface === 'terminal' ? null : langButton}
         </Box>
       )
     }
@@ -505,6 +532,7 @@ export const register: Register = (on, options) => {
       board: open.slice(0, 6).map(t => t.text),
       deadline: nearest === undefined ? '' : `${nearest.title} · ${formatDue(nearest.due, offset)} · ${countdown(nearest.due, now, talk)}`,
       lang: talk,
+      theme,
     }
     let house: RenderElement
     if (e.surface === 'terminal') {
@@ -573,11 +601,40 @@ export const register: Register = (on, options) => {
           <Box flexGrow={1} />
           <Button key="panel" label={w.list} hotkey="l" onPress={() => $.ui.open({ id: PANE, title: w.paneTitle })} />
           {e.surface === 'terminal' ? null : <Button key="pet" label={w.pet} onPress={() => onPet($, 'main')} />}
-          <Button key="lang" label={w.otherLanguage} plain dimColor onPress={() => setLang($, talk === 'zh' ? 'en' : 'zh')} />
+          <Button key="scene" label={w.scene(w.themes[theme])} hotkey="s" onPress={() => setTheme($, 'next')} />
+          {langButton}
           <Button key="hide" label={w.hide} plain dimColor onPress={() => setCollapsed($, true)} />
         </Box>
       </Box>
     )
+  })
+
+  on('ui.render', { component: 'Spinner' }, async ($, e, next) => {
+    const [usage, talk] = await Promise.all([read($, usageAtom), read($, langAtom)])
+    const mode = e.props.mode
+    const doing = mode === 'tool-use' || mode === 'tool-input' ? 'type' : mode === 'responding' ? 'code' : 'think'
+    const props = {
+      word: e.props.message ?? e.props.word,
+      suffix: e.props.suffix,
+      mode: say(talk).modes[mode],
+      startedAt: usage.turnStartedAt > 0 ? usage.turnStartedAt : Date.now(),
+      doing,
+      isTerminal: e.surface === 'terminal',
+    } as const
+    if (e.surface === 'terminal') {
+      const { Client } = $.ui.resolve(e)
+      return <Client key="spinner" module="./spinner-client.tsx" props={props} />
+    }
+    if (e.surface === 'desktop') {
+      const { Box, Svg, Client } = $.ui.resolve(e)
+      return (
+        <Box flexDirection="row" gap={1} alignItems="center">
+          <Svg source={miniClawdSvg(doing)} alt="Clawd" width={30} height={20} />
+          <Client key="spinner" module="./spinner-client.tsx" props={props} />
+        </Box>
+      )
+    }
+    return next(e)
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
@@ -697,6 +754,14 @@ export const register: Register = (on, options) => {
     if (arg === 'show') {
       await setCollapsed($, false)
       return { text: say(lang).unfolded }
+    }
+    if (arg === 'scene') {
+      const wanted = choice.toLowerCase()
+      const aliases: Record<string, Theme | 'next'> = { house: 'house', 小屋: 'house', beach: 'beach', 海灘: 'beach', space: 'space', 太空站: 'space', forest: 'forest', camp: 'forest', 森林: 'forest', 森林營地: 'forest', next: 'next', '': 'next' }
+      const pick = aliases[wanted]
+      if (pick === undefined) return { text: say(lang).sceneUsage }
+      const theme = await setTheme($, pick)
+      return { text: say(lang).sceneSet(say(lang).themes[theme]) }
     }
     if (arg === 'lang') {
       const wanted = choice.toLowerCase()

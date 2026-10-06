@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import type { Game, SceneActor, SceneProps, TimeOfDay } from '../types'
+import type { Game, SceneActor, SceneProps, Theme, TimeOfDay } from '../types'
 import { countdown, parseDeadline, urgency } from '../hooks/deadline'
 import { hitTest, layoutFor, SPOT_X, tipOf } from '../hooks/scene'
 import { sceneSvg } from '../hooks/scene-svg'
@@ -22,7 +22,7 @@ const crewIn = (game: Game): SceneActor[] =>
     label: '',
   }))
 
-const sceneOf = (game: Game, time: TimeOfDay = 'day', lang: 'zh' | 'en' = 'zh'): SceneProps => ({
+const sceneOf = (game: Game, time: TimeOfDay = 'day', lang: 'zh' | 'en' = 'zh', theme: Theme = 'house'): SceneProps => ({
   actors: [{ id: 'main', cap: null, fromX: SPOT_X.library, toX: SPOT_X.code, departAt: NOW - 500, doing: 'code', label: '改 register.tsx' }, ...crewIn(game)],
   todos: 2,
   days: 5,
@@ -32,6 +32,7 @@ const sceneOf = (game: Game, time: TimeOfDay = 'day', lang: 'zh' | 'en' = 'zh'):
   board: ['更新設定裡的密鑰', '上傳簡報'],
   deadline: 'Launch · 12/24 23:59 · 剩 5 天',
   lang,
+  theme,
 })
 
 describe('the pure parts', () => {
@@ -103,10 +104,11 @@ describe('the pure parts', () => {
     expect(tipOf(english, { kind: 'room', id: 'terminal' })).toStartWith('Server room')
   })
 
-  test('every game and time of day makes a transparent, hoverable SVG inside the size limit', async () => {
+  test('every scene, game and time of day makes a transparent, hoverable SVG inside the size limit', async () => {
+    for (const theme of ['house', 'beach', 'space', 'forest'] as const)
     for (const game of ['pong', 'volley', 'rope', 'tower', 'sleep'] as const) {
       for (const time of ['day', 'dusk', 'night'] as const) {
-        const svg = sceneSvg(sceneOf(game, time), NOW)
+        const svg = sceneSvg(sceneOf(game, time, 'zh', theme), NOW)
         expect(svg.length).toBeLessThan(131072)
         expect(svg).toContain('color-scheme:light dark')
         expect(svg).toContain('.clawd:hover')
@@ -117,6 +119,9 @@ describe('the pure parts', () => {
     expect(english).toContain('Game room')
     expect(english).toContain('Board: for you to do')
     expect(english).not.toContain('遊戲間')
+    expect(sceneSvg(sceneOf('volley', 'night', 'zh', 'beach'), NOW)).toContain('沙灘球場')
+    expect(sceneSvg(sceneOf('pong', 'day', 'en', 'forest'), NOW)).toContain('Campfire')
+    expect(sceneSvg(sceneOf('pong', 'day', 'en', 'space'), NOW)).toContain('Outside: the endless dark')
   })
 })
 
@@ -253,5 +258,43 @@ describe('the band above the prompt', () => {
     await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
     expect(await ui.find({ text: /I'm Clawd, your sidekick/ })).toBeDefined()
+  })
+
+  test('the scene button moves the Clawds from the house to the beach, space and the forest', async ($, on) => {
+    world(on)
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const source = async (): Promise<string> => String((await ui.find({ type: 'Svg' }))?.props.source)
+    expect(await ui.find({ type: 'Button', text: '場景：小屋' })).toBeDefined()
+    await ui.press({ key: 'scene' })
+    expect(await source()).toContain('沙灘球場')
+    expect(await ui.find({ type: 'Button', text: '場景：海灘' })).toBeDefined()
+    const moved = await $.command.run({ command: 'clawd', args: 'scene forest', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    expect(moved.text).toBe('Clawd 們搬到森林營地了。')
+    expect(await source()).toContain('營火空地')
+  })
+
+  test('a narrow desktop band keeps the house; folding it leaves a way back', async ($, on) => {
+    world(on)
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    const narrow = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns: 50 }, surface: 'desktop' })
+    expect(String((await narrow.find({ type: 'Svg' }))?.props.source)).toContain('遊戲間')
+    await narrow.press({ key: 'hide' })
+    expect(await narrow.find({ text: /Clawd · .* · 沒有待辦/ })).toBeDefined()
+    await narrow.press({ key: 'expand' })
+    expect(String((await narrow.find({ type: 'Svg' }))?.props.source)).toContain('遊戲間')
+  })
+
+  test('the spinner is a thinking Clawd with a clock that keeps counting', async ($, on) => {
+    world(on)
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    const props = { word: 'Thinking', message: null, suffix: '…', mode: 'thinking' as const }
+    const terminal = await $.ui.mount({ plugin: 'clawd-sidekick', surface: 'terminal', component: 'Spinner', props })
+    expect(await terminal.find({ text: /▐▛███▜▌/, in: 'spinner' })).toBeDefined()
+    expect(await terminal.find({ text: /Thinking…/, in: 'spinner' })).toBeDefined()
+    expect(await terminal.find({ text: /思考中/, in: 'spinner' })).toBeDefined()
+    const desktop = await $.ui.mount({ plugin: 'clawd-sidekick', surface: 'desktop', component: 'Spinner', props })
+    expect(await desktop.find({ type: 'Svg' })).toBeDefined()
+    expect(await desktop.find({ text: /Thinking…/, in: 'spinner' })).toBeDefined()
   })
 })

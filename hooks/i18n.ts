@@ -7,6 +7,10 @@ export type Lang = 'zh' | 'en'
 
 export type RoomId = 'library' | 'codelab' | 'terminal' | 'web' | 'game'
 
+export type Theme = 'house' | 'beach' | 'space' | 'forest'
+
+export type SpinnerMode = 'requesting' | 'responding' | 'thinking' | 'tool-input' | 'tool-use'
+
 type Doings =
   | 'idle'
   | 'read'
@@ -117,9 +121,14 @@ export type Strings = {
   badDate: string
   left: { days: (d: number) => string; dayHours: (h: number) => string; hoursMinutes: (h: number, m: number) => string; minutes: (m: number) => string }
   ago: { days: (d: number) => string; hours: (h: number) => string }
-  // The house
-  rooms: Record<RoomId, string>
-  roomTips: Record<RoomId, string>
+  // The scenes
+  themes: Record<Theme, string>
+  scene: (name: string) => string
+  sceneSet: (name: string) => string
+  sceneUsage: string
+  rooms: Record<Theme, Record<RoomId, string>>
+  roomPurpose: Record<RoomId, string>
+  roomTip: (name: string, purpose: string) => string
   doings: Record<Doings, string>
   caps: Record<string, string>
   mainClawd: string
@@ -131,9 +140,12 @@ export type Strings = {
   boardTitle: (todos: readonly string[]) => string
   calendarEmpty: string
   calendar: (deadline: string) => string
-  lamp: string
-  arcade: string
+  lights: Record<Theme, string>
+  toys: Record<Theme, string>
   outside: Record<'day' | 'dusk' | 'night', string>
+  outsideSpace: string
+  noTodos: string
+  modes: Record<SpinnerMode, string>
 }
 
 const zh: Strings = {
@@ -187,10 +199,10 @@ const zh: Strings = {
   deadlines: '截止日',
   remove: '移除',
   petted: count => `被摸了 ${count} 次`,
-  describeClawd: 'Clawd 副駕：打開面板（/clawd hide 收合、/clawd show 展開、/clawd lang en 換英文）',
+  describeClawd: 'Clawd 副駕：打開面板（/clawd scene 換場景、/clawd hide 收合、/clawd lang en 換英文）',
   describeTodo: 'Clawd 幫你記的人類待辦',
   describeDeadline: '截止日雷達：越接近 Clawd 越慌',
-  hintClawd: '[hide|show|lang zh|en|auto]',
+  hintClawd: '[scene 名稱|hide|show|lang zh|en|auto]',
   hintTodo: '[add 事情|done N|undo|rm N|clear]',
   hintDeadline: '[add 12/24 名稱|rm N]',
   folded: 'Clawd 收成一行了，/clawd show 叫他回來。',
@@ -223,14 +235,24 @@ const zh: Strings = {
     minutes: m => `剩 ${m} 分`,
   },
   ago: { days: d => `過了 ${d} 天`, hours: h => `過了 ${h} 小時` },
-  rooms: { library: '書庫', codelab: '工作室', terminal: '機房', web: '瞭望台', game: '遊戲間' },
-  roomTips: {
-    library: '書庫：Claude 讀檔、搜尋的時候會來這裡',
-    codelab: '工作室：改程式、想事情；牆上是你的待辦和截止日',
-    terminal: '機房：跑指令的地方',
-    web: '瞭望台：上網查資料，窗外是你那邊的時間',
-    game: '遊戲間：Claude 工作時大家打排球，閒著時輪流玩桌球、跳繩、疊積木，深夜就睡覺',
+  themes: { house: '小屋', beach: '海灘', space: '太空站', forest: '森林營地' },
+  scene: name => `場景：${name}`,
+  sceneSet: name => `Clawd 們搬到${name}了。`,
+  sceneUsage: '用法：/clawd scene house（小屋）、beach（海灘）、space（太空站）、forest（森林營地），或 /clawd scene next 換下一個',
+  rooms: {
+    house: { library: '書庫', codelab: '工作室', terminal: '機房', web: '瞭望台', game: '遊戲間' },
+    beach: { library: '遮陽傘', codelab: '沙灘書桌', terminal: '救生塔', web: '燈塔觀景台', game: '沙灘球場' },
+    space: { library: '資料艙', codelab: '實驗艙', terminal: '反應爐', web: '觀測窗', game: '娛樂艙' },
+    forest: { library: '帳篷', codelab: '木桌', terminal: '無線電小屋', web: '樹屋', game: '營火空地' },
   },
+  roomPurpose: {
+    library: 'Claude 讀檔、搜尋的時候會來這裡',
+    codelab: '改程式、想事情的地方；你的待辦和截止日也在這',
+    terminal: '跑指令的地方',
+    web: '上網查資料的地方',
+    game: 'Claude 工作時大家打排球，閒著時輪流玩桌球、跳繩、疊積木，深夜就睡覺',
+  },
+  roomTip: (name, purpose) => `${name}：${purpose}`,
   doings: {
     idle: '在發呆',
     read: '在書庫看書',
@@ -264,9 +286,17 @@ const zh: Strings = {
   boardTitle: todos => (todos.length === 0 ? '布告欄：沒有要你做的事 ✓' : `布告欄：你要做的事\n${todos.map(t => `□ ${t}`).join('\n')}`),
   calendarEmpty: '日曆：還沒有截止日（/deadline add 12/24 名稱）',
   calendar: deadline => `日曆：${deadline}`,
-  lamp: '檯燈：摸一下就亮',
-  arcade: '大型電玩：有人在玩的時候別擋到螢幕',
+  lights: { house: '檯燈：摸一下就亮', beach: '燈塔：摸一下就亮', space: '全像檯燈：摸一下就亮', forest: '營燈：摸一下就亮' },
+  toys: {
+    house: '大型電玩：有人在玩的時候別擋到螢幕',
+    beach: '沙堡：裡面住著一隻小螃蟹',
+    space: '全像電玩：有人在玩的時候別擋到螢幕',
+    forest: '營火：小心燙',
+  },
   outside: { day: '窗外：白天', dusk: '窗外：黃昏', night: '窗外：晚上' },
+  outsideSpace: '窗外：無邊的宇宙',
+  noTodos: '沒有待辦',
+  modes: { requesting: '等回應', responding: '回覆中', thinking: '思考中', 'tool-input': '準備工具', 'tool-use': '用工具' },
 }
 
 const en: Strings = {
@@ -320,10 +350,10 @@ const en: Strings = {
   deadlines: 'Deadlines',
   remove: 'Remove',
   petted: count => (count === 1 ? 'Petted once' : `Petted ${count} times`),
-  describeClawd: 'Clawd Sidekick: open the pane (/clawd hide folds the band, /clawd show unfolds it, /clawd lang zh switches to Chinese)',
+  describeClawd: 'Clawd Sidekick: open the pane (/clawd scene changes the scene, /clawd hide folds the band, /clawd lang zh switches to Chinese)',
   describeTodo: 'The things Clawd noted for you to do',
   describeDeadline: 'Deadline radar: the closer it gets, the more Clawd frets',
-  hintClawd: '[hide|show|lang en|zh|auto]',
+  hintClawd: '[scene name|hide|show|lang en|zh|auto]',
   hintTodo: '[add something|done N|undo|rm N|clear]',
   hintDeadline: '[add 12/24 name|rm N]',
   folded: 'Clawd folded into one line. /clawd show brings him back.',
@@ -356,14 +386,24 @@ const en: Strings = {
     minutes: m => `${m} min left`,
   },
   ago: { days: d => (d === 1 ? '1 day ago' : `${d} days ago`), hours: h => `${h} h ago` },
-  rooms: { library: 'Library', codelab: 'Workshop', terminal: 'Server room', web: 'Lookout', game: 'Game room' },
-  roomTips: {
-    library: 'Library: where Clawd goes when Claude reads and searches files',
-    codelab: 'Workshop: editing and thinking; your to-dos and deadlines hang on the wall',
-    terminal: 'Server room: where commands run',
-    web: 'Lookout: browsing the web; the window shows your time of day',
-    game: 'Game room: volleyball while Claude works; ping-pong, jump rope or blocks while it waits; asleep late at night',
+  themes: { house: 'House', beach: 'Beach', space: 'Space station', forest: 'Forest camp' },
+  scene: name => `Scene: ${name}`,
+  sceneSet: name => `The Clawds moved to the ${name.toLowerCase()}.`,
+  sceneUsage: 'Usage: /clawd scene house, beach, space or forest, or /clawd scene next for the next one',
+  rooms: {
+    house: { library: 'Library', codelab: 'Workshop', terminal: 'Server room', web: 'Lookout', game: 'Game room' },
+    beach: { library: 'Umbrella', codelab: 'Beach desk', terminal: 'Lifeguard tower', web: 'Lighthouse view', game: 'Beach court' },
+    space: { library: 'Archive pod', codelab: 'Lab', terminal: 'Reactor', web: 'Observatory', game: 'Rec deck' },
+    forest: { library: 'Tent', codelab: 'Log desk', terminal: 'Radio hut', web: 'Treehouse', game: 'Campfire' },
   },
+  roomPurpose: {
+    library: 'where Clawd goes when Claude reads and searches files',
+    codelab: 'editing and thinking; your to-dos and deadlines live here too',
+    terminal: 'where commands run',
+    web: 'browsing the web',
+    game: 'volleyball while Claude works; ping-pong, jump rope or blocks while it waits; asleep late at night',
+  },
+  roomTip: (name, purpose) => `${name}: ${purpose}`,
   doings: {
     idle: 'daydreaming',
     read: 'reading in the library',
@@ -397,9 +437,17 @@ const en: Strings = {
   boardTitle: todos => (todos.length === 0 ? 'Board: nothing for you to do ✓' : `Board: for you to do\n${todos.map(t => `□ ${t}`).join('\n')}`),
   calendarEmpty: 'Calendar: no deadlines yet (/deadline add 12/24 name)',
   calendar: deadline => `Calendar: ${deadline}`,
-  lamp: 'Lamp: hover to switch it on',
-  arcade: "Arcade: don't block the screen while someone's playing",
+  lights: { house: 'Lamp: hover to switch it on', beach: 'Lighthouse: hover to light it', space: 'Holo-lamp: hover to switch it on', forest: 'Lantern: hover to light it' },
+  toys: {
+    house: "Arcade: don't block the screen while someone's playing",
+    beach: 'Sandcastle: a little crab lives inside',
+    space: "Holo-arcade: don't block the screen while someone's playing",
+    forest: "Campfire: careful, it's hot",
+  },
   outside: { day: 'Outside: daytime', dusk: 'Outside: dusk', night: 'Outside: night' },
+  outsideSpace: 'Outside: the endless dark',
+  noTodos: 'no to-dos',
+  modes: { requesting: 'requesting', responding: 'responding', thinking: 'thinking', 'tool-input': 'preparing a tool', 'tool-use': 'using tools' },
 }
 
 const STRINGS: Record<Lang, Strings> = { zh, en }
