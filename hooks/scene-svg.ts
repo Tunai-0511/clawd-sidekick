@@ -34,6 +34,7 @@ import {
   drawSquash,
   SQUASH_LOOP,
   isNervous,
+  floatOf,
   outfitOf,
   playOf,
   playPose,
@@ -248,7 +249,7 @@ const FONT = "font-family=\"'PingFang TC','Noto Sans TC','Microsoft JhengHei',sy
 
 /** How far over his head the bubble must go: above a holiday hat, or an armful of books. */
 function headroom(a: SceneActor, s: SceneProps): number {
-  return Math.max(hatRise(outfitOf(a, s).hat), a.doing === 'tidy' ? 6 : 0)
+  return Math.max(hatRise(outfitOf(a, s).hat), a.doing === 'tidy' ? 6 : 0) + floatOf(s, a.doing)
 }
 
 function bubble(label: string, isMain: boolean, rise: number): string {
@@ -258,7 +259,8 @@ function bubble(label: string, isMain: boolean, rise: number): string {
   const height = size + 1.2
   const cx = REF + 8
   const x = Math.max(cx - width / 2, REF - 12)
-  const y = 13.2 - height - (isMain ? 0 : 1.2) - rise
+  // Never off the top: a floater in his tallest hat has the bubble brush its brim.
+  const y = Math.max(0.1, 13.2 - height - (isMain ? 0 : 1.2) - rise)
   return (
     `<g class="quiet"><rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${width.toFixed(2)}" height="${height.toFixed(2)}" rx="0.8" fill="#FFFFFF" fill-opacity="0.94" stroke="#2A1A15" stroke-width="0.18"/>` +
     `<path d="M${cx - 0.8} ${(y + height).toFixed(2)}l0.8 1l0.8 -1z" fill="#FFFFFF"/>` +
@@ -276,18 +278,25 @@ function actor(a: SceneActor, index: number, s: SceneProps, now: number, play: P
     const out: Grid[] = []
     for (let t = 0; t < ticks; t++) {
       const g = blank()
+      const pose = isPlaying ? playPose(a, t, play) : {}
       drawClawd(g, REF, t, doing, a.cap, index * 3, {
-        ...(isPlaying ? playPose(a, t, play) : {}),
+        ...pose,
         ...outfitOf(a, s),
         isSweating: isPlaying && a.cap === null && isNervous(s),
+        lift: (pose.lift ?? 0) + floatOf(s, doing),
       })
       out.push(g)
     }
     return layered(out, box)
   }
   const stay = frames(a.doing, LOOP, true)
+  // In open space nothing stands on the ground: no shadow, and he bobs as he floats.
+  if (floatOf(s, a.doing) > 0) return following(a, now, '', bobbing(stay, index), bobbing(frames('walk', 4, false), index))
   return following(a, now, `${SHADOW}`, stay, frames('walk', 4, false))
 }
+
+/** A floater's gentle bob, a pixel at a time, each Clawd on a beat of his own. */
+const bobbing = (body: string, index: number): string => `<g class="bob" style="animation-delay:-${(index * 1.3).toFixed(1)}s">${body}</g>`
 
 /** `stay` where a Clawd is going, or a walk there in `walk` first; `always` goes with him the whole way. */
 function following(a: SceneActor, now: number, always: string, stay: string, walk: string): string {
@@ -329,9 +338,12 @@ const rectOf = (b: Box, attrs = ''): string => `<rect x="${b.x}" y="${b.y}" widt
  * SMIL's own visibility), and the other frames, the clouds, the falling
  * leaves, the flicker and the drifting motes go.
  */
-const STILL = '@media (prefers-reduced-motion:reduce){.f,.drift{display:none}.f0{visibility:visible!important}}'
+const STILL = '@media (prefers-reduced-motion:reduce){.f,.drift{display:none}.f0{visibility:visible!important}.bob{animation:none}}'
 
-const STYLE = `<style>:root{color-scheme:light dark;background:transparent}${STILL}</style>`
+/** A floater's bob: up a pixel, two, one, and back, in steps so the pixels stay crisp. */
+const BOB = '.bob{animation:bob 4.2s steps(1,end) infinite}@keyframes bob{0%,100%{transform:translateY(0)}25%,75%{transform:translateY(-1px)}50%{transform:translateY(-2px)}}'
+
+const STYLE = `<style>:root{color-scheme:light dark;background:transparent}${BOB}${STILL}</style>`
 
 /** How far a light reaches, as an ellipse's two radii. */
 function reachOf(glow: Glow): [number, number] {
@@ -384,6 +396,17 @@ function lighting(s: SceneProps): string {
       const bloom = (0.12 + shade * 0.55) * strength
       const box = { x: g.box.x - 0.5, y: g.box.y - 0.5, w: g.box.w + 1, h: g.box.h + 1 }
       over += rectOf(box, `fill="${g.color}" opacity="${bloom.toFixed(2)}" filter="url(#bloom)"`)
+      // Screens and racks breathe a little, each at a pace of its own.
+      if (g.kind === 'screen' || g.kind === 'leds') {
+        over += `<g class="drift">${rectOf(box, `fill="${g.color}" filter="url(#bloom)" opacity="0"`).replace('/>', `><animate attributeName="opacity" values="0;${(0.1 + shade * 0.3).toFixed(2)};0" dur="${g.kind === 'leds' ? 2.4 : 3.7}s" begin="${((g.box.x % 7) * 0.4).toFixed(1)}s" repeatCount="indefinite"/></rect>`)}</g>`
+      }
+      // The day falls in at a window as a beam, down to the floor.
+      if (g.kind === 'window' && art.hasDaylight && s.time !== 'night') {
+        const { x, y, w, h } = g.box
+        const beam = s.time === 'dusk' ? '#FFC9A0' : '#FFFBEA'
+        defs += `<linearGradient id="beam-${span.id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${beam}" stop-opacity="0.22"/><stop offset="1" stop-color="${beam}" stop-opacity="0"/></linearGradient>`
+        over += `<path d="M${x} ${y + h}h${w}l${8} ${FLOOR - y - h}h${-w - 16}z" fill="url(#beam-${span.id})"/>`
+      }
       if (g.kind === 'fire') {
         over += `<g class="drift">${rectOf(box, `fill="${g.color}" filter="url(#bloom)"`).replace('/>', '><animate attributeName="opacity" values="0.05;0.35;0.12;0.3;0.05" dur="1.3s" repeatCount="indefinite"/></rect>')}</g>`
       }
@@ -403,7 +426,7 @@ function lighting(s: SceneProps): string {
     defs += `<mask id="${id}" maskUnits="userSpaceOnUse" x="${span.x0}" y="0" width="${width}" height="${SH}"><rect x="${span.x0}" y="0" width="${width}" height="${SH}" fill="#FFF"/>${holes}</mask>`
     veil += `<rect x="${span.x0}" y="0" width="${width}" height="${SH}" fill="${NIGHT}" opacity="${shade}" mask="url(#${id})"/>`
   }
-  const dusk = s.time === 'dusk' ? `<rect width="${SW}" height="${SH}" fill="#FF8A4C" opacity="0.07"/>` : ''
+  const dusk = s.time === 'dusk' && art.hasDaylight ? `<rect width="${SW}" height="${SH}" fill="#FF8A4C" opacity="0.07"/>` : ''
   defs +=
     '<linearGradient id="ceiling" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0.16"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>' +
     '<linearGradient id="ground" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.12"/></linearGradient>'
@@ -411,6 +434,50 @@ function lighting(s: SceneProps): string {
     ? `<rect x="0" y="3" width="${SW}" height="5" fill="url(#ceiling)"/><rect x="0" y="17" width="${SW}" height="8" fill="url(#ground)"/>`
     : `<rect x="0" y="19" width="${SW}" height="6" fill="url(#ground)"/>`
   return `<defs>${defs}</defs><g>${depth}${veil}${dusk}${over}</g>`
+}
+
+/**
+ * Behind open space: the deep, darker at the top, two nebulae as soft as
+ * smoke, and far stars drifting so slowly the near ones seem to pass them.
+ */
+function backdrop(s: SceneProps): string {
+  if (s.theme !== 'cosmos') return ''
+  const far = Array.from({ length: 40 }, (_, i) => {
+    const x = (i * 97 + 13) % (SW + 40)
+    const y = (i * 37 + 5) % 24
+    return `<rect x="${x}" y="${y}" width="0.6" height="0.6" fill="#9FB0D8" opacity="${(0.35 + (i % 4) * 0.12).toFixed(2)}"/>`
+  }).join('')
+  return (
+    '<defs><linearGradient id="deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#05071A"/><stop offset="1" stop-color="#0E1230"/></linearGradient>' +
+    '<filter id="haze" x="-30%" y="-80%" width="160%" height="260%"><feGaussianBlur stdDeviation="5"/></filter></defs>' +
+    `<rect width="${SW}" height="${SH}" fill="url(#deep)"/>` +
+    '<g filter="url(#haze)" opacity="0.75">' +
+    '<ellipse cx="38" cy="9" rx="34" ry="7" fill="#4B2E8A"/><ellipse cx="62" cy="14" rx="22" ry="5" fill="#2E4FA0" opacity="0.7"/>' +
+    '<ellipse cx="205" cy="8" rx="40" ry="6" fill="#7A2E6E" opacity="0.8"/><ellipse cx="236" cy="15" rx="20" ry="5" fill="#3A2E8A" opacity="0.7"/>' +
+    '</g>' +
+    `<g class="drift"><animateTransform attributeName="transform" type="translate" from="0 0" to="-40 0" dur="240s" repeatCount="indefinite"/>${far}</g>`
+  )
+}
+
+/** Where the sun sits by day and at dusk, and the moon by night, in the scenes under an open sky. */
+const SUN: Partial<Record<SceneProps['theme'], { day: [number, number]; dusk: [number, number]; moon: [number, number]; horizon: number }>> = {
+  beach: { day: [228, 4], dusk: [189, 13.5], moon: [227.5, 3.5], horizon: 15 },
+  forest: { day: [216, 4], dusk: [177, 12.5], moon: [215.5, 3.5], horizon: 14 },
+}
+
+/** An open sky made smooth, the bands blended into one fall of colour, and a halo round the sun or the moon. */
+function skyGlow(s: SceneProps): string {
+  const sun = SUN[s.theme]
+  if (sun === undefined) return ''
+  const [top, low] = s.time === 'night' ? ['#141C33', '#2E3F6E'] : s.time === 'dusk' ? ['#E8836B', '#F6C77A'] : ['#6EC1F0', '#B9E2F7']
+  const [cx, cy] = s.time === 'night' ? sun.moon : s.time === 'dusk' ? sun.dusk : sun.day
+  const halo = s.time === 'night' ? '#F4E8B0' : s.time === 'dusk' ? '#FFB070' : '#FFF4C0'
+  return (
+    `<defs><linearGradient id="sky-fall" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${top}"/><stop offset="1" stop-color="${low}"/></linearGradient>` +
+    `<radialGradient id="halo"><stop offset="0" stop-color="${halo}" stop-opacity="0.7"/><stop offset="1" stop-color="${halo}" stop-opacity="0"/></radialGradient></defs>` +
+    `<rect width="${SW}" height="${sun.horizon}" fill="url(#sky-fall)" opacity="0.4"/>` +
+    `<circle cx="${cx}" cy="${cy}" r="${s.time === 'dusk' ? 14 : 9}" fill="url(#halo)"/>`
+  )
 }
 
 /**
@@ -434,6 +501,13 @@ function atmosphere(s: SceneProps): string {
         specks.push(`<path d="M${x - 0.9} ${y}h1.8M${x} ${y - 0.9}v1.8" stroke="#FFFFFF" stroke-width="0.35" opacity="0"><animate attributeName="opacity" values="0;0.9;0" dur="3.2s" begin="${k * 0.8}s" repeatCount="indefinite"/></path>`)
       }
       break
+    case 'cosmos':
+      for (let i = 0; i < 12; i++) {
+        const x = 6 + ((i * 47) % 244)
+        const y = 2 + ((i * 7) % 18)
+        specks.push(`<path d="M${x - 0.9} ${y}h1.8M${x} ${y - 0.9}v1.8" stroke="${i % 3 === 0 ? '#BFE9FF' : '#FFFFFF'}" stroke-width="0.35" opacity="0"><animate attributeName="opacity" values="0;0.9;0" dur="${(2.6 + (i % 4) * 0.6).toFixed(1)}s" begin="${(i * 0.7).toFixed(1)}s" repeatCount="indefinite"/></path>`)
+      }
+      break
     case 'beach':
       if (s.time === 'night') break
       for (let i = 0; i < 8; i++) {
@@ -443,6 +517,14 @@ function atmosphere(s: SceneProps): string {
       }
       break
     case 'forest':
+      // Smoke off the campfire, puff after puff, drifting as it climbs.
+      for (let i = 0; i < 5; i++) {
+        specks.push(
+          `<circle cx="184" cy="13" r="${(0.9 + (i % 3) * 0.3).toFixed(1)}" fill="#A9A9B4" opacity="0">` +
+            `<animateTransform attributeName="transform" type="translate" values="0 0;${2 + (i % 2) * 2} -6;${-1 + (i % 3)} -11" dur="5s" begin="${i}s" repeatCount="indefinite"/>` +
+            `<animate attributeName="opacity" values="0;0.45;0" dur="5s" begin="${i}s" repeatCount="indefinite"/></circle>`,
+        )
+      }
       if (s.time === 'day') break
       for (let i = 0; i < 8; i++) specks.push(drift(20 + ((i * 61) % 220), 15 + ((i * 7) % 7), 4 - (i % 3) * 3, -2 + (i % 2) * 3, 0.38, '#E8FF8A', 6 + i, i * 2, true))
       break
@@ -485,7 +567,9 @@ export function sceneSvg(s: SceneProps, now: number): string {
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SW} ${SH}" width="100%" height="100%" shape-rendering="crispEdges">` +
     STYLE +
+    backdrop(s) +
     house(s, play) +
+    skyGlow(s) +
     clouds(s) +
     eggSvg(s) +
     order.map(({ a, i }) => actor(a, i, s, now, play)).join('') +

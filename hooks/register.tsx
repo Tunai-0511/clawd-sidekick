@@ -15,7 +15,6 @@ import { countdown, formatDue, newId, parseDeadline, parseOffset, urgency, URGEN
 import { langOf, say, type Lang } from './i18n'
 import { actorTip, actorX, eggOf, layoutFor, ROOMS, SH, SPOT_X, STEP, SW, type Spot } from './scene'
 import { actorHoverSvg, doneClawdSvg, miniClawdSvg, roomHoverSvg, sceneSvg, squashClawdSvg } from './scene-svg'
-import { cameraOf, FACE_COLUMNS, FACE_ROWS, faceCells, HOUSE_ROWS, houseCells, signsLine } from './raster'
 import { isSwitched, roomSpans } from './light'
 import { H, W } from './sprite'
 import { THEME_ORDER, THEMES } from './themes'
@@ -51,7 +50,6 @@ const TROPHY_PANE = 'clawd-trophies'
 const SESSION_PANE = 'clawd-session'
 
 /** What the spinner says the turn is doing: in English whatever Clawd speaks, beside Claude Code's own `Working…`. */
-const MODE_WORDS = { requesting: 'requesting', responding: 'responding', thinking: 'thinking', 'tool-input': 'preparing a tool', 'tool-use': 'using tools' } as const
 const ORANGE = '#D97757'
 /** CSS pixels a desktop cell is taken to be, to size the house's frame. */
 const CELL_PX = 8
@@ -244,10 +242,6 @@ const BREAK_AFTER = 50 * 60_000
 const STRETCH_EVERY = 10 * 60_000
 /** This session's id, under which it tells the others what it is up to. */
 let sessionId = ''
-/** Where the terminal house is drawn, for the timer that paints its next frame; unset once it is gone. */
-let rasterSite: { requestId: string; columns: number; props: SceneProps } | undefined
-let rasterFrame = 0
-let blits: { cancel: () => void } | undefined
 let sharedAs = ''
 let sharedAt = 0
 /** When each tool call still running began, for its row's clock. */
@@ -743,7 +737,7 @@ function houseZones($: Engine, ui: Elements['vscode'], s: SceneProps, o: { width
       library: w.memoryTip(s.theme, s.memory),
       codelab: s.notes.length === 0 ? w.calendarEmpty : w.boardTitle(s.notes.slice(0, 4).map(n => n.text)),
       terminal: o.git === null ? '' : w.gitLine(o.git.branch, o.git.ahead, o.git.behind, o.git.changed + o.git.untracked),
-      web: s.theme === 'space' ? w.outsideSpace : w.outside[s.time],
+      web: s.theme === 'space' ? w.outsideSpace : s.theme === 'cosmos' ? w.outsideCosmos : w.outside[s.time],
       game: s.medals.length === 0 ? w.toys[s.theme] : `${w.toys[s.theme]}\n${w.medalsTip(s.trophyCount[0], s.trophyCount[1])}`,
     }
     const hasSwitch = art.glows.some(g => g.room === span.id && isSwitched(g))
@@ -782,24 +776,14 @@ function houseZones($: Engine, ui: Elements['vscode'], s: SceneProps, o: { width
   return zones
 }
 
-/** The terminal house's next frame, painted in place; nothing to do while no terminal shows it. */
-async function blitHouse($: Engine): Promise<void> {
-  const site = rasterSite
-  if (site === undefined) return
-  rasterFrame++
-  try {
-    const result = await $.ui.blit({ requestId: site.requestId, key: 'house', cells: houseCells(site.props, rasterFrame, await $.clock.now(), site.columns) })
-    if (result.deny !== undefined && rasterSite === site) stopHouse()
-  } catch {
-    if (rasterSite === site) stopHouse()
+/** A pane, where it can be drawn: Clawd's live in the Desktop app, so a terminal alone gets a word instead. */
+async function openPane($: Engine, id: string, title: string): Promise<void> {
+  const surfaces = await $.session.surfaces()
+  if (surfaces.length > 0 && surfaces.every(s => s === 'terminal')) {
+    $.ui.toast(say(lang).desktopOnly)
+    return
   }
-}
-
-/** Nothing shows the terminal house: no more frames until it is drawn again. */
-function stopHouse(): void {
-  rasterSite = undefined
-  blits?.cancel()
-  blits = undefined
+  await $.ui.open({ id, title })
 }
 
 // ── Lights ───────────────────────────────────────────────────────────────
@@ -1108,7 +1092,8 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.props.hasSurvey) return next(e)
+    // Clawd lives in the Desktop app; the terminal keeps Claude Code's own.
+    if (e.props.hasSurvey || e.surface === 'terminal') return next(e)
     const [doing, deadlines, isCollapsed, actors, usage, game, offset, talk, theme, zone, seasonPick, holidayPick, trophies, neighbors, egg, birthday, names, git, dark] = await Promise.all([
       read($, activity),
       read($, deadlinesAtom),
@@ -1168,11 +1153,9 @@ export const register: Register = (on, options) => {
         </Text>
       )
 
-    // The terminal folds the band when the house cannot fit; the desktop scales it instead.
-    const isCramped = e.surface === 'terminal' && (width < 70 || e.props.maxRows < SH / 2 + 3)
     const main = actors.find(a => a.cap === null)
     const langButton = <Button key="lang" label={w.otherLanguage} onPress={() => setLang($, talk === 'zh' ? 'en' : 'zh')} />
-    if (isCollapsed || isCramped) {
+    if (isCollapsed) {
       const now_ = doing.label && doing.label !== w.sleepy ? doing.label : w.doings[main?.doing ?? 'idle']
       const label = <Text color={ORANGE} bold wrap="truncate-end">{`${names.main ?? 'Clawd'} · ${now_}`}</Text>
       const figures = [
@@ -1181,28 +1164,8 @@ export const register: Register = (on, options) => {
         hasReply ? stat(isWorking ? w.turn : w.lastTurn, clockText) : null,
         gitText,
       ]
-      const expand = isCollapsed ? <Button key="expand" label={w.expand} variant="primary" onPress={() => setCollapsed($, false)} /> : null
+      const expand = <Button key="expand" label={w.expand} variant="primary" onPress={() => setCollapsed($, false)} />
       // Folded, the band keeps what matters at a glance: what he's doing, the context and the plan, this reply, git, the next deadline.
-      if (e.surface === 'terminal') {
-        // The terminal's Clawd is the CLI banner's own, three rows of him painted cell by cell: one row of glyphs reads as a bar.
-        const { Raster } = $.ui.resolve(e)
-        return (
-          <Box flexDirection="row" columnGap={2}>
-            <Raster key="face" columns={FACE_COLUMNS} rows={FACE_ROWS} cells={faceCells()} />
-            <Box flexDirection="column" flexGrow={1}>
-              {label}
-              <Box flexDirection="row" columnGap={2}>
-                {figures}
-              </Box>
-              <Box flexDirection="row" columnGap={1}>
-                {deadlineText ?? <Text dimColor>{w.noDeadline}</Text>}
-                <Box flexGrow={1} />
-                {expand}
-              </Box>
-            </Box>
-          </Box>
-        )
-      }
       const { Svg } = $.ui.resolve(e)
       return (
         <Box flexDirection="row" columnGap={2} alignItems="center" flexWrap="wrap">
@@ -1246,24 +1209,7 @@ export const register: Register = (on, options) => {
       dark,
     }
     let house: RenderElement
-    if (e.surface === 'terminal') {
-      const { Raster } = $.ui.resolve(e)
-      const columns = Math.max(1, Math.min(width, SW))
-      // The timer repaints it from here on, a frame a tick, until it is gone.
-      rasterSite = { requestId: e.requestId, columns, props: scene }
-      blits ??= $.clock.every(STEP, () => void blitHouse($))
-      house = (
-        <Box flexDirection="column">
-          <Raster key="house" columns={columns} rows={HOUSE_ROWS} cells={houseCells(scene, rasterFrame, now, columns)} />
-          {/* Short on rows, the room names go first, so the figures and the buttons still fit. */}
-          {e.props.maxRows - HOUSE_ROWS < 5 ? null : (
-            <Text dimColor wrap="truncate">
-              {signsLine(cameraOf(scene, columns, now), columns, talk, theme)}
-            </Text>
-          )}
-        </Box>
-      )
-    } else {
+    {
       const { Svg } = $.ui.resolve(e)
       const frame = Math.round(width * CELL_PX)
       const height = Math.round((frame * SH) / SW)
@@ -1317,7 +1263,7 @@ export const register: Register = (on, options) => {
           {deadlineText ?? <Text dimColor>{w.noDeadline}</Text>}
           <Box flexGrow={1} />
           <Button key="panel" label={w.list} hotkey="l" onPress={() => $.ui.open({ id: PANE, title: w.paneTitle })} />
-          {e.surface === 'terminal' ? null : <Button key="pet" label={w.pet} onPress={() => onPet($, 'main')} />}
+          <Button key="pet" label={w.pet} onPress={() => onPet($, 'main')} />
           <Button key="lights" label={isAllDark(dark) ? w.lightOn : w.lightOff} onPress={() => toggleLights($)} />
           <Button key="scene" label={w.scene(w.themes[theme])} hotkey="s" onPress={() => setTheme($, 'next')} />
           {langButton}
@@ -1336,16 +1282,8 @@ export const register: Register = (on, options) => {
     const props = {
       word: e.props.message ?? e.props.word,
       suffix: e.props.suffix,
-      // The terminal says what the turn is doing; the desktop says it itself.
-      mode: e.surface === 'terminal' ? MODE_WORDS[mode] : '',
       startedAt: usage.turnStartedAt > 0 ? usage.turnStartedAt : Date.now(),
-      doing,
-      isTerminal: e.surface === 'terminal',
     } as const
-    if (e.surface === 'terminal') {
-      const { Client } = $.ui.resolve(e)
-      return <Client key="spinner" module="./spinner-client.tsx" props={props} />
-    }
     if (e.surface === 'desktop') {
       const { Box, Svg, Client } = $.ui.resolve(e)
       return (
@@ -1409,10 +1347,8 @@ export const register: Register = (on, options) => {
           props={{
             word: TOOL_WORDS[e.props.tool] ?? `Using ${e.props.tool}`,
             suffix: '',
-            mode: clip(detail.replace(/\s+/g, ' '), 60),
+            detail: clip(detail.replace(/\s+/g, ' '), 60),
             startedAt: toolStarted.get(e.props.tool_use_id) ?? Date.now(),
-            doing: 'type',
-            isTerminal: false,
           }}
         />
       </Box>
@@ -1450,9 +1386,6 @@ export const register: Register = (on, options) => {
     const details: string[] = []
     if (lastTurnMs > 0) details.push(`${en.lastTurn} ${Math.floor(lastTurnMs / 60_000)}:${String(Math.floor((lastTurnMs % 60_000) / 1000)).padStart(2, '0')}`)
     if (today !== null && today.date === dateOf(now || (await $.clock.now()), offset) && today.workMs > 0) details.push(en.todayWorked(duration(today.workMs, 'en')))
-    if (e.surface === 'terminal') {
-      return next({ ...e, props: { ...e.props, tail: ` · ${names.main ?? 'Clawd'} · ${[word, ...details].join(' · ')}` } })
-    }
     if (e.surface !== 'desktop') return next(e)
     const STANDING: readonly Doing[] = ['idle', 'wait', 'read', 'love', 'cheer', 'oops', 'sleep']
     const main = actors.find(a => a.cap === null)?.doing ?? 'idle'
@@ -1470,7 +1403,8 @@ export const register: Register = (on, options) => {
     )
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
+    if (e.surface === 'terminal') return next(e)
     const [doing, deadlines, pets, offset, talk] = await Promise.all([
       read($, activity),
       read($, deadlinesAtom),
@@ -1482,16 +1416,9 @@ export const register: Register = (on, options) => {
     const w = say(talk)
     const now = await $.clock.now()
     const { Box, Text, Button } = $.ui.resolve(e)
-    const scale = e.props.bodyColumns >= W * 2 + 2 ? 2 : 1
     const nervous = isNervous(deadlines, now)
-    let sprite: RenderElement
-    if (e.surface === 'terminal') {
-      const { Client } = $.ui.resolve(e)
-      sprite = <Client key="clawd-big" module="./clawd-client.tsx" props={{ pose: doing.pose, isNervous: nervous, scale }} width={W * scale} height={(H * scale) / 2} />
-    } else {
-      const { Svg } = $.ui.resolve(e)
-      sprite = <Svg source={clawdSvg(doing.pose, { isNervous: nervous }, 6)} alt={`Clawd: ${doing.label || w.hello}`} width={W * 6} height={H * 6} />
-    }
+    const { Svg } = $.ui.resolve(e)
+    const sprite = <Svg source={clawdSvg(doing.pose, { isNervous: nervous }, 6)} alt={`Clawd: ${doing.label || w.hello}`} width={W * 6} height={H * 6} />
     const heading = (text: string): RenderElement => (
       <Text color={ORANGE} bold>
         {`── ${text} `}
@@ -1528,7 +1455,8 @@ export const register: Register = (on, options) => {
     )
   })
 
-  on('ui.render', { component: 'Pane', requestId: CHANGES_PANE }, async ($, e) => {
+  on('ui.render', { component: 'Pane', requestId: CHANGES_PANE }, async ($, e, next) => {
+    if (e.surface === 'terminal') return next(e)
     const [talk, changes, git] = await Promise.all([read($, langAtom), read($, changesAtom), read($, gitAtom)])
     const root = await $.session.root()
     const w = say(talk)
@@ -1570,7 +1498,8 @@ export const register: Register = (on, options) => {
     )
   })
 
-  on('ui.render', { component: 'Pane', requestId: TROPHY_PANE }, async ($, e) => {
+  on('ui.render', { component: 'Pane', requestId: TROPHY_PANE }, async ($, e, next) => {
+    if (e.surface === 'terminal') return next(e)
     const [talk, trophies] = await Promise.all([read($, langAtom), read($, trophiesAtom)])
     const life = await loadLife($)
     const w = say(talk)
@@ -1598,10 +1527,10 @@ export const register: Register = (on, options) => {
         </Box>
         <Box flexDirection="column">
           {FAMILIES.map(family => {
-            const { tier, next } = standing(family, trophies.unlocked)
+            const { tier, next: coming } = standing(family, trophies.unlocked)
             const value = family.progress(life)
-            const filled = next === null ? 10 : Math.min(10, Math.floor((10 * value) / next.target))
-            const target = next ?? family.tiers[family.tiers.length - 1]!
+            const filled = coming === null ? 10 : Math.min(10, Math.floor((10 * value) / coming.target))
+            const target = coming ?? family.tiers[family.tiers.length - 1]!
             return (
               <Box key={family.id} flexDirection="column">
                 <Box flexDirection="row" gap={1}>
@@ -1616,9 +1545,9 @@ export const register: Register = (on, options) => {
                   <Text dimColor>{w.trophyNext(w.amount(family.unit, value), w.amount(family.unit, target.target))}</Text>
                 </Box>
                 <Text dimColor>
-                  {next === null
+                  {coming === null
                     ? `  ${w.trophyMax} ${w.familyWhat[family.id](w.amountLong(family.unit, target.target))}`
-                    : `  ${w.nextTier(w.tiers[next.tier], w.familyWhat[family.id](w.amountLong(family.unit, next.target)), next.reward === undefined ? null : rewardName(next.reward))}`}
+                    : `  ${w.nextTier(w.tiers[coming.tier], w.familyWhat[family.id](w.amountLong(family.unit, coming.target)), coming.reward === undefined ? null : rewardName(coming.reward))}`}
                 </Text>
               </Box>
             )
@@ -1628,107 +1557,22 @@ export const register: Register = (on, options) => {
     )
   })
 
-  on('ui.render', { component: 'Pane', requestId: SESSION_PANE }, async ($, e) => {
+  on('ui.render', { component: 'Pane', requestId: SESSION_PANE }, async ($, e, next) => {
+    if (e.surface === 'terminal') return next(e)
     const [talk, project] = await Promise.all([read($, langAtom), read($, projectAtom), read($, sessionAtom), read($, changesAtom), read($, usageAtom)])
     const summary = await summaryOf($)
-    const w = say(talk)
-    const { Box, Text } = $.ui.resolve(e)
-    if (e.surface !== 'terminal') {
-      const { Svg } = $.ui.resolve(e)
-      const width = Math.min(720, Math.max(360, Math.round(e.props.bodyColumns * CELL_PX)))
-      return <Svg source={sessionSvg(summary, talk, project)} alt={sessionLine(summary, talk)} width={width} height={Math.round((width * 140) / 240)} />
-    }
-    const top = [...summary.files].sort((a, b) => b.added + b.removed - (a.added + a.removed)).slice(0, 6)
-    return (
-      <Box flexDirection="column" gap={1}>
-        <Text color={ORANGE} bold>{`── ${w.sessionTitle}${project === '' ? '' : ` · ${project}`} ──`}</Text>
-        <Text wrap="wrap">{sessionLine(summary, talk)}</Text>
-        {top.length === 0 ? null : (
-          <Box flexDirection="column">
-            <Text dimColor>{w.sessionTop}</Text>
-            {top.map(f => (
-              <Box flexDirection="row" gap={1}>
-                <Text wrap="truncate-start">{f.path}</Text>
-                <Text color="#4CB363">{`+${f.added}`}</Text>
-                <Text color="#E5484D">{`−${f.removed}`}</Text>
-              </Box>
-            ))}
-          </Box>
-        )}
-      </Box>
-    )
+    const { Svg } = $.ui.resolve(e)
+    const width = Math.min(720, Math.max(360, Math.round(e.props.bodyColumns * CELL_PX)))
+    return <Svg source={sessionSvg(summary, talk, project)} alt={sessionLine(summary, talk)} width={width} height={Math.round((width * 140) / 240)} />
   })
 
-  on('ui.render', { component: 'Pane', requestId: RECAP }, async ($, e) => {
+  on('ui.render', { component: 'Pane', requestId: RECAP }, async ($, e, next) => {
+    if (e.surface === 'terminal') return next(e)
     const [talk, theme, names] = await Promise.all([read($, langAtom), read($, themeAtom), read($, namesAtom), read($, todayAtom)])
     const { today, week, streak } = await readWeek($)
-    const w = say(talk)
-    const { Box, Text } = $.ui.resolve(e)
-    if (e.surface !== 'terminal') {
-      const { Svg } = $.ui.resolve(e)
-      const width = Math.min(720, Math.max(360, Math.round(e.props.bodyColumns * CELL_PX)))
-      return <Svg source={recapSvg(today, week, streak, talk, theme, names.main)} alt={recapLine(today, streak, talk)} width={width} height={Math.round((width * 140) / 240)} />
-    }
-    const { Client } = $.ui.resolve(e)
-    const favorite = favoriteRoom(today)
-    const total = ROOM_IDS.reduce((sum, id) => sum + today.rooms[id], 0)
-    const BAR = 40
-    const COLOR: Record<RoomId, string> = { library: '#C8873F', codelab: '#4D8DF6', terminal: '#4CB363', web: '#8ECDF5', game: '#A98BF5' }
-    const most = Math.max(1, ...week.map(d => d?.tools ?? 0))
-    const spark = week.map(d => ' ▁▂▃▄▅▆▇█'[Math.round((8 * (d?.tools ?? 0)) / most)] ?? ' ').join('')
-    const figure = (value: string | number, label: string): RenderElement => (
-      <Text>
-        <Text bold>{String(value)}</Text>
-        <Text dimColor>{` ${label}`}</Text>
-      </Text>
-    )
-    return (
-      <Box flexDirection="column" gap={1}>
-        <Text color={ORANGE} bold>{`── ${names.main === undefined ? w.recapTitle : w.recapTitleOf(names.main)} · ${w.recapDate(today.date)} ──`}</Text>
-        <Box flexDirection="row" gap={2} alignItems="center">
-          <Client key="recap-clawd" module="./clawd-client.tsx" props={{ pose: poseOf(today), isNervous: false, scale: 1 }} width={W} height={H / 2} />
-          <Box flexDirection="column">
-            <Text color={ORANGE}>{today.turns + today.tools === 0 ? w.recapQuiet : w.recapWorked(duration(today.workMs, talk))}</Text>
-            {favorite === undefined ? null : <Text dimColor>{w.recapFavorite(w.rooms[theme][favorite])}</Text>}
-          </Box>
-        </Box>
-        <Box flexDirection="row" flexWrap="wrap" columnGap={3}>
-          {figure(today.turns, w.recapTurns(today.turns))}
-          {figure(today.tools, w.recapTools(today.tools))}
-          {figure(today.edits, w.recapEdits(today.edits))}
-          {figure(today.runs, w.recapRuns(today.runs))}
-          {figure(`${today.testsPassed}/${today.testsPassed + today.testsFailed}`, w.recapTests)}
-          {figure(today.commits, w.recapCommits(today.commits))}
-          {figure(today.pushes + today.prsOpened, w.recapPushes(today.pushes + today.prsOpened))}
-          {figure(today.compactions, w.recapTidies(today.compactions))}
-        </Box>
-        <Box flexDirection="column">
-          <Text dimColor>{w.recapWhere}</Text>
-          <Text>
-            {total === 0 ? (
-              <Text dimColor>{'░'.repeat(BAR)}</Text>
-            ) : (
-              ROOM_IDS.map(id => <Text color={COLOR[id]}>{'█'.repeat(Math.round((BAR * today.rooms[id]) / total))}</Text>)
-            )}
-          </Text>
-          <Box flexDirection="row" flexWrap="wrap" columnGap={2}>
-            {total === 0
-              ? null
-              : ROOM_IDS.filter(id => today.rooms[id] > 0).map(id => (
-                  <Text>
-                    <Text color={COLOR[id]}>■</Text>
-                    <Text dimColor>{` ${w.rooms[theme][id]} ${Math.round((100 * today.rooms[id]) / total)}%`}</Text>
-                  </Text>
-                ))}
-          </Box>
-        </Box>
-        <Text>
-          <Text dimColor>{`${w.recapWeek} `}</Text>
-          <Text color={ORANGE}>{spark}</Text>
-          <Text color={ORANGE} bold>{`  ${w.recapStreak(streak)}`}</Text>
-        </Text>
-      </Box>
-    )
+    const { Svg } = $.ui.resolve(e)
+    const width = Math.min(720, Math.max(360, Math.round(e.props.bodyColumns * CELL_PX)))
+    return <Svg source={recapSvg(today, week, streak, talk, theme, names.main)} alt={recapLine(today, streak, talk)} width={width} height={Math.round((width * 140) / 240)} />
   })
 
   // ── Session and commands ────────────────────────────────────────────────
@@ -1873,11 +1717,11 @@ export const register: Register = (on, options) => {
       return answer($, words.birthdaySet(`${month}/${day}`))
     }
     if (arg === 'changes' || arg === '改了什麼') {
-      await $.ui.open({ id: CHANGES_PANE, title: say(lang).changesTitle })
+      await openPane($, CHANGES_PANE, say(lang).changesTitle)
       return {}
     }
     if (arg === 'trophies' || arg === 'trophy' || arg === '成就') {
-      await $.ui.open({ id: TROPHY_PANE, title: say(lang).trophiesTitle })
+      await openPane($, TROPHY_PANE, say(lang).trophiesTitle)
       const trophies = await read($, trophiesAtom)
       return answer($, say(lang).trophiesCount(Object.keys(trophies.unlocked).length, TROPHY_TOTAL))
     }
@@ -1902,12 +1746,12 @@ export const register: Register = (on, options) => {
       return answer($, walking === null ? words.palOff : words.palSet(words.pals[walking]))
     }
     if (arg === 'recap') {
-      await $.ui.open({ id: RECAP, title: say(lang).recapPaneTitle })
+      await openPane($, RECAP, say(lang).recapPaneTitle)
       const { today, streak } = await readWeek($)
       return answer($, recapLine(today, streak, lang))
     }
     if (arg === 'summary' || arg === 'session' || arg === '結算') {
-      await $.ui.open({ id: SESSION_PANE, title: say(lang).sessionTitle })
+      await openPane($, SESSION_PANE, say(lang).sessionTitle)
       return answer($, sessionLine(await summaryOf($), lang))
     }
     if (arg === 'lights' || arg === 'light' || arg === '燈') {
@@ -1930,7 +1774,7 @@ export const register: Register = (on, options) => {
     }
     if (arg === 'scene') {
       const wanted = choice.toLowerCase()
-      const aliases: Record<string, Theme | 'next'> = { house: 'house', 小屋: 'house', beach: 'beach', 海灘: 'beach', space: 'space', 太空站: 'space', forest: 'forest', camp: 'forest', 森林: 'forest', 森林營地: 'forest', next: 'next', '': 'next' }
+      const aliases: Record<string, Theme | 'next'> = { house: 'house', 小屋: 'house', beach: 'beach', 海灘: 'beach', space: 'space', 太空站: 'space', forest: 'forest', camp: 'forest', 森林: 'forest', 森林營地: 'forest', cosmos: 'cosmos', universe: 'cosmos', 宇宙: 'cosmos', next: 'next', '': 'next' }
       const pick = aliases[wanted]
       if (pick === undefined) return answer($, say(lang).sceneUsage)
       const theme = await setTheme($, pick)
@@ -1972,7 +1816,7 @@ export const register: Register = (on, options) => {
       if (pick === undefined) return answer($, say(lang).langUsage)
       return answer($, say(await setLang($, pick)).speaks)
     }
-    await $.ui.open({ id: PANE, title: say(lang).paneTitle })
+    await openPane($, PANE, say(lang).paneTitle)
     return {}
   })
 
@@ -1997,7 +1841,7 @@ export const register: Register = (on, options) => {
       return answer($, w.removed(target.title))
     }
     // The list is the pane's: nothing of it goes into the conversation.
-    await $.ui.open({ id: PANE, title: w.paneTitle })
+    await openPane($, PANE, w.paneTitle)
     return deadlines.length === 0 ? answer($, `${w.noDeadlines} ${w.usage}`) : {}
   })
 

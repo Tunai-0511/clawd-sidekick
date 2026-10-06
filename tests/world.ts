@@ -16,6 +16,8 @@ export type World = {
   root: string
   /** What the plugin keeps across sessions, as it keeps it. */
   store: Map<string, unknown>
+  /** Where the session draws; a test changes it to a terminal alone. */
+  surfaces: ('terminal' | 'desktop')[]
   /** The plan's windows session.usage reports; a test changes them. */
   limits: { kind: string; percentUsed: number; resetsAt?: string }[]
 }
@@ -23,7 +25,7 @@ export type World = {
 export type Extra = { zone?: string; now?: number; git?: { status: string; lastCommit: number } }
 
 export function world(on: On, replies: string[] = [], stored: Readonly<Record<string, unknown>> = {}, system = 'zh-Hant-TW', extra: Extra = {}): World {
-  const w: World = { clock: mock.clock(on, { now: extra.now ?? NOW }), toasts: [], opened: [], prompts: [], replies, root: '/Users/me/projects/my-app', store: new Map(), limits: [{ kind: 'five_hour', percentUsed: 31 }, { kind: 'seven_day', percentUsed: 12 }] }
+  const w: World = { clock: mock.clock(on, { now: extra.now ?? NOW }), toasts: [], opened: [], prompts: [], replies, root: '/Users/me/projects/my-app', store: new Map(), surfaces: ['desktop'], limits: [{ kind: 'five_hour', percentUsed: 31 }, { kind: 'seven_day', percentUsed: 12 }] }
   // A store in memory the test can look into, each value copied the way a file would.
   const copy = (value: unknown): unknown => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)))
   for (const [key, value] of Object.entries(stored)) w.store.set(key, copy(value))
@@ -42,6 +44,7 @@ export function world(on: On, replies: string[] = [], stored: Readonly<Record<st
   on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
   on('session.root', () => ({ value: w.root }))
   on('session.id', () => ({ value: 'this-session' }))
+  on('session.surfaces', () => ({ value: w.surfaces }))
   on('process.run', (_$, e) => {
     const zone = extra.zone === undefined ? '' : `/var/db/timezone/zoneinfo/${extra.zone}\n`
     const git = e.argv[0] === 'git' && extra.git !== undefined ? (e.argv[1] === 'status' ? extra.git.status : `${extra.git.lastCommit}\n`) : ''

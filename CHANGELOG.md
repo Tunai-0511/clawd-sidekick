@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.18.0
+
+- **Clawd lives in the Desktop app.** In a terminal the mod now draws nothing (no band, spinner, hint line or panes; Claude Code looks as it always does), and the commands that open a pane say where to see it. Work done there still counts toward your day and trophies. The terminal-only drawing (the Raster house, the block-glyph Clawds) is gone.
+- **A fifth scene: Cosmos.** Open space, where the Clawds float and bob a pixel at a time instead of standing, with no shadows under them: a drifting library whose books float free as the context fills, an orbital desk, a satellite with solar wings, a telescope on its rock, a zero-g court, all on rocky asteroids, under soft nebulae with far stars sliding slowly by and an astronaut drifting past now and then. `/clawd scene cosmos`.
+- **Finer scenes and motion.** A beam of daylight down from the house's window; open skies blended smooth with a halo round the sun or the moon; smoke rising off the campfire; screens and racks whose glow breathes; dusk's warm cast only where there's daylight. Speech bubbles never leave the scene, however high a floater's hat.
+
 ## 0.17.1
 
 - The folded terminal band: the CLI banner's whole Clawd, painted cell by cell, beside three lines (what he's doing; the context, the 5-hour window, this reply and git; the next deadline). One row of block glyphs read as a bar.

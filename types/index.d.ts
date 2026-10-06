@@ -72,7 +72,7 @@ export type Doing =
 export type Game = 'pong' | 'volley' | 'rope' | 'tower' | 'sleep' | 'lunch' | 'tea'
 
 /** Where the Clawds live: every scene has the same five zones. */
-export type Theme = 'house' | 'beach' | 'space' | 'forest'
+export type Theme = 'house' | 'beach' | 'space' | 'forest' | 'cosmos'
 
 export type Season = 'spring' | 'summer' | 'autumn' | 'winter'
 

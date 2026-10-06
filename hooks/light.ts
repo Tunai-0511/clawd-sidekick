@@ -24,7 +24,8 @@ export const isSwitched = (glow: Glow): boolean => glow.kind === 'screen' || glo
 
 /** How dim a room is: indoors by its switch and the hour, outdoors by the hour alone. */
 export function shadeOf(art: ThemeArt, time: TimeOfDay, isDark: boolean): number {
-  if (art.isIndoor) {
+  // Indoors, or out in space where no sun reaches: the switch decides.
+  if (art.isIndoor || !art.hasDaylight) {
     if (isDark) return !art.hasDaylight || time === 'night' ? 0.66 : time === 'dusk' ? 0.52 : 0.36
     return time === 'night' ? 0.2 : time === 'dusk' ? 0.08 : 0
   }

@@ -10,7 +10,7 @@ export type Lang = 'zh' | 'en'
 
 export type RoomId = 'library' | 'codelab' | 'terminal' | 'web' | 'game'
 
-export type Theme = 'house' | 'beach' | 'space' | 'forest'
+export type Theme = 'house' | 'beach' | 'space' | 'forest' | 'cosmos'
 
 
 type SeasonWord = 'spring' | 'summer' | 'autumn' | 'winter'
@@ -239,6 +239,7 @@ export type Strings = {
   toys: Record<Theme, string>
   outside: Record<'day' | 'dusk' | 'night', string>
   outsideSpace: string
+  outsideCosmos: string
   // Seasons, holidays
   seasons: Record<SeasonWord, string>
   holidays: Record<HolidayWord, string>
@@ -249,6 +250,7 @@ export type Strings = {
   holidayAuto: (holiday: string) => string
   holidayUsage: string
   // Lights, the hover cards, the plan's limits, the session's summary
+  desktopOnly: string
   lightOff: string
   lightOn: string
   lightsSet: (rooms: string, isOn: boolean) => string
@@ -299,7 +301,7 @@ const zh: Strings = {
   compacting: '整理記憶中…',
   compacted: '記憶整理好了',
   memoryTip: (theme, level) => {
-    const what = { house: '書架', beach: '書堆', space: '資料水晶', forest: '書堆' }[theme]
+    const what = { house: '書架', beach: '書堆', space: '資料水晶', forest: '書堆', cosmos: '漂浮的書' }[theme]
     return level === null
       ? `${what}＝Claude 的記憶（context），還不知道用了多少`
       : `${what}＝Claude 的記憶（context），大約 ${level * 10}% 滿；快滿時 Clawd 會整理一次`
@@ -378,7 +380,7 @@ const zh: Strings = {
   takeBreak: '休息一下吧',
   breakToast: minutes => `已經連續工作 ${minutes} 分鐘了，起來伸展一下吧`,
   eggStar: '✨ 有流星！快看天空',
-  eggCritter: { house: '🐦 窗台上來了一隻小麻雀', beach: '🐋 遠方有鯨魚在噴水', space: '🛸 觀測窗外飛過一架 UFO', forest: '🦌 樹叢後面有隻鹿在偷看' },
+  eggCritter: { house: '🐦 窗台上來了一隻小麻雀', beach: '🐋 遠方有鯨魚在噴水', space: '🛸 觀測窗外飛過一架 UFO', forest: '🦌 樹叢後面有隻鹿在偷看', cosmos: '🧑‍🚀 有個太空人從遠方飄過去了' },
   birthdayToast: name => `🎂 生日快樂！${name}和夥伴們都戴上了派對帽`,
   recapTitleOf: name => `${name}的一天`,
   crewNumber: n => `夥伴 ${n}`,
@@ -488,15 +490,16 @@ const zh: Strings = {
     underHour: '剩不到 1 小時',
   },
   ago: { days: d => `過了 ${d} 天`, hours: h => `過了 ${h} 小時` },
-  themes: { house: '小屋', beach: '海灘', space: '太空站', forest: '森林營地' },
+  themes: { house: '小屋', beach: '海灘', space: '太空站', forest: '森林營地', cosmos: '宇宙' },
   scene: name => `場景：${name}`,
   sceneSet: name => `Clawd 們搬到${name}了。`,
-  sceneUsage: '用法：/clawd scene house（小屋）、beach（海灘）、space（太空站）、forest（森林營地），或 /clawd scene next 換下一個',
+  sceneUsage: '用法：/clawd scene house（小屋）、beach（海灘）、space（太空站）、forest（森林營地）、cosmos（宇宙），或 /clawd scene next 換下一個',
   rooms: {
     house: { library: '書庫', codelab: '工作室', terminal: '機房', web: '瞭望台', game: '遊戲間' },
     beach: { library: '遮陽傘', codelab: '沙灘書桌', terminal: '救生塔', web: '燈塔觀景台', game: '沙灘球場' },
     space: { library: '資料艙', codelab: '實驗艙', terminal: '反應爐', web: '觀測窗', game: '娛樂艙' },
     forest: { library: '帳篷', codelab: '木桌', terminal: '無線電小屋', web: '樹屋', game: '營火空地' },
+    cosmos: { library: '漂流書庫', codelab: '軌道書桌', terminal: '衛星', web: '望遠鏡', game: '零重力球場' },
   },
   roomPurpose: {
     library: 'Claude 讀檔、搜尋的時候會來這裡',
@@ -549,9 +552,11 @@ const zh: Strings = {
     beach: '沙堡：裡面住著一隻小螃蟹',
     space: '全像電玩：有人在玩的時候別擋到螢幕',
     forest: '營火：小心燙',
+    cosmos: '漂浮電玩：玩的時候要抓好，不然會飄走',
   },
   outside: { day: '窗外：白天', dusk: '窗外：黃昏', night: '窗外：晚上' },
   outsideSpace: '窗外：無邊的宇宙',
+  outsideCosmos: '四面八方都是星星，遠方有一顆帶環的行星',
   seasons: { spring: '春天', summer: '夏天', autumn: '秋天', winter: '冬天' },
   holidays: { none: '平常日', lunarNewYear: '農曆新年', halloween: '萬聖節', christmas: '聖誕節' },
   seasonSet: season => `季節固定成${season}。/clawd season auto 改回跟著日期。`,
@@ -560,6 +565,7 @@ const zh: Strings = {
   holidaySet: holiday => `節日佈置固定成${holiday}。/clawd holiday auto 改回跟著日期。`,
   holidayAuto: holiday => `節日跟著日期走，現在是${holiday}。`,
   holidayUsage: '用法：/clawd holiday lunar（農曆新年）、halloween、christmas、none（不佈置），或 auto 跟著日期',
+  desktopOnly: 'Clawd 副駕住在 Claude 桌面版裡，在這裡打開就看得到。',
   lightOff: '💡 關燈',
   lightOn: '💡 開燈',
   lightsSet: (rooms, isOn) => `${rooms}${isOn ? '開燈了' : '關燈了'}`,
@@ -623,7 +629,7 @@ const en: Strings = {
   compacting: 'Tidying the memory…',
   compacted: 'Memory tidied',
   memoryTip: (theme, level) => {
-    const what = { house: 'The shelves', beach: 'The book pile', space: 'The data crystals', forest: 'The book pile' }[theme]
+    const what = { house: 'The shelves', beach: 'The book pile', space: 'The data crystals', forest: 'The book pile', cosmos: 'The floating books' }[theme]
     return level === null
       ? `${what} = Claude's memory (context), not measured yet`
       : `${what} = Claude's memory (context), about ${level * 10}% full; when it fills up, Clawd tidies it`
@@ -704,7 +710,7 @@ const en: Strings = {
   takeBreak: 'Time for a break',
   breakToast: minutes => `${minutes} minutes at it without a break: time to get up and stretch`,
   eggStar: '✨ A shooting star! Look at the sky',
-  eggCritter: { house: '🐦 A sparrow is hopping along the window sill', beach: '🐋 A whale is spouting far out at sea', space: '🛸 A UFO is gliding past the observatory window', forest: '🦌 A deer is peeking out from the bushes' },
+  eggCritter: { house: '🐦 A sparrow is hopping along the window sill', beach: '🐋 A whale is spouting far out at sea', space: '🛸 A UFO is gliding past the observatory window', forest: '🦌 A deer is peeking out from the bushes', cosmos: '🧑‍🚀 An astronaut is drifting by in the distance' },
   birthdayToast: name => `🎂 Happy birthday! ${name} and the crew have their party hats on`,
   recapTitleOf: name => `${name}'s day`,
   crewNumber: n => `Crew ${n}`,
@@ -817,15 +823,16 @@ const en: Strings = {
     underHour: 'under an hour left',
   },
   ago: { days: d => (d === 1 ? '1 day ago' : `${d} days ago`), hours: h => `${h} h ago` },
-  themes: { house: 'House', beach: 'Beach', space: 'Space station', forest: 'Forest camp' },
+  themes: { house: 'House', beach: 'Beach', space: 'Space station', forest: 'Forest camp', cosmos: 'Cosmos' },
   scene: name => `Scene: ${name}`,
   sceneSet: name => `The Clawds moved to the ${name.toLowerCase()}.`,
-  sceneUsage: 'Usage: /clawd scene house, beach, space or forest, or /clawd scene next for the next one',
+  sceneUsage: 'Usage: /clawd scene house, beach, space, forest or cosmos, or /clawd scene next for the next one',
   rooms: {
     house: { library: 'Library', codelab: 'Workshop', terminal: 'Server room', web: 'Lookout', game: 'Game room' },
     beach: { library: 'Umbrella', codelab: 'Beach desk', terminal: 'Lifeguard tower', web: 'Lighthouse view', game: 'Beach court' },
     space: { library: 'Archive pod', codelab: 'Lab', terminal: 'Reactor', web: 'Observatory', game: 'Rec deck' },
     forest: { library: 'Tent', codelab: 'Log desk', terminal: 'Radio hut', web: 'Treehouse', game: 'Campfire' },
+    cosmos: { library: 'Drifting library', codelab: 'Orbital desk', terminal: 'Satellite', web: 'Telescope', game: 'Zero-g court' },
   },
   roomPurpose: {
     library: 'where Clawd goes when Claude reads and searches files',
@@ -878,9 +885,11 @@ const en: Strings = {
     beach: 'Sandcastle: a little crab lives inside',
     space: "Holo-arcade: don't block the screen while someone's playing",
     forest: "Campfire: careful, it's hot",
+    cosmos: 'Floating arcade: hold on while you play, or off it drifts',
   },
   outside: { day: 'Outside: daytime', dusk: 'Outside: dusk', night: 'Outside: night' },
   outsideSpace: 'Outside: the endless dark',
+  outsideCosmos: 'Stars in every direction, and a ringed planet far off',
   seasons: { spring: 'spring', summer: 'summer', autumn: 'autumn', winter: 'winter' },
   holidays: { none: 'an ordinary day', lunarNewYear: 'Lunar New Year', halloween: 'Halloween', christmas: 'Christmas' },
   seasonSet: season => `The season is set to ${season}. /clawd season auto follows the date again.`,
@@ -889,6 +898,7 @@ const en: Strings = {
   holidaySet: holiday => `Decorations are set to ${holiday}. /clawd holiday auto follows the date again.`,
   holidayAuto: holiday => `Holidays follow the date: today is ${holiday}.`,
   holidayUsage: 'Usage: /clawd holiday lunar (Lunar New Year), halloween, christmas, none, or auto to follow the date',
+  desktopOnly: 'Clawd Sidekick lives in the Claude desktop app: open it there to see this.',
   lightOff: '💡 Lights off',
   lightOn: '💡 Lights on',
   lightsSet: (rooms, isOn) => `Lights ${isOn ? 'on' : 'off'}: ${rooms}`,

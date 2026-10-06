@@ -706,6 +706,9 @@ export function drawSquash(g: Grid, x: number, t: number): void {
   }
 }
 
+/** How far a Clawd floats off the ground: in open space, all but a sleeper, who is tucked in on the rock. */
+export const floatOf = (s: Pick<SceneProps, 'theme'>, doing: Doing | 'walk'): number => (s.theme === 'cosmos' && doing !== 'sleep' ? 4 : 0)
+
 /** A deadline under three days away makes the main Clawd sweat. */
 export const isNervous = (s: SceneProps): boolean => s.urgency === 'near' || s.urgency === 'urgent'
 
@@ -942,7 +945,7 @@ export function eggOf(now: number, time: TimeOfDay, theme: Theme): Egg | null {
   const window = Math.floor(now / EGG_WINDOW)
   const h = hash(window * 7919 + 29)
   if (h % 25 !== 0 || now % EGG_WINDOW >= EGG_SHOW) return null
-  const isDark = theme === 'space' || time !== 'day'
+  const isDark = theme === 'space' || theme === 'cosmos' || time !== 'day'
   return isDark && (h >> 8) % 2 === 0 ? 'star' : 'critter'
 }
 
@@ -1041,7 +1044,7 @@ export function composeScene(s: SceneProps, t: number, now: number, options: Com
     const x = actorX(actor, now)
     const doing = x !== actor.toX ? 'walk' : actor.id === options.hover ? 'love' : actor.doing
     const mod = doing === actor.doing ? playPose(actor, t, play) : {}
-    drawClawd(g, x, t, doing, actor.cap, i * 3, { ...mod, ...outfitOf(actor, s), isSweating: actor.cap === null && isNervous(s) })
+    drawClawd(g, x, t, doing, actor.cap, i * 3, { ...mod, ...outfitOf(actor, s), isSweating: actor.cap === null && isNervous(s), lift: (mod.lift ?? 0) + floatOf(s, doing) })
   })
   blankets(g, play, s, now)
   if (s.pal !== null) {

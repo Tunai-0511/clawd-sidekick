@@ -1,11 +1,11 @@
-// The scenes Clawd can live in: the house, the beach, the space station and
-// the forest camp. Every one keeps the same five zones at the same places
+// The scenes Clawd can live in: the house, the beach, the space station, the
+// forest camp and open space, where everything floats. Every one keeps the same five zones at the same places
 // (scene.ts's ROOMS and SPOT_X), the board and the calendar where the
 // pointer looks for them, and the screen and terminal the animations know,
 // so the Clawds behave the same anywhere; only what is around them changes.
 
 import type { RoomId, SceneProps, Theme } from '../types'
-import { C, digit, hash, px, rect, stamp, SW, type Box, type Grid } from './pixels'
+import { C, digit, hash, px, rect, SH, stamp, SW, type Box, type Grid } from './pixels'
 
 export type Part = Box & { ticks: number }
 
@@ -700,6 +700,109 @@ function forest(g: Grid, t: number, s: SceneProps, o: { hasClouds: boolean; isPl
   pine(g, 250, 1, 25, leaves(s, 1), s)
 }
 
+// ── Open space ────────────────────────────────────────────────────────────
+
+/**
+ * A rock adrift: bumps along its lit top, craters in its face, an underside
+ * that tapers into shadow, and a few pebbles floating loose off its ends.
+ */
+function asteroid(g: Grid, x: number, w: number, y: number): void {
+  for (let i = 2; i < w - 3; i++) {
+    const bump = hash(x * 31 + i * 7) % 11
+    if (bump < 2) rect(g, x + i, y - 1, bump + 2, 1, C.stoneLight)
+  }
+  rect(g, x + 1, y, w - 2, 1, C.stoneLight)
+  rect(g, x, y + 1, w, 1, C.stone)
+  rect(g, x + 2, y + 2, w - 4, 1, C.stoneDark)
+  for (let i = 4; i < w - 5; i += 8 + (hash(x + i) % 5)) {
+    rect(g, x + i, y + 1, 2, 1, C.stoneDark)
+    px(g, x + i, y, C.stone)
+  }
+  for (let i = 5; i < w - 6; i += 11) px(g, x + i, y + 2, C.stone)
+  px(g, x - 2, y - 2, C.stone)
+  px(g, x + w + 1, y - 1, C.stoneDark)
+  px(g, x + w + 2, y - 3, C.stone)
+}
+
+/** Where the drifting library's books float, the first `level` of them out: one more a tenth of the context. */
+const FLOATING_BOOKS: readonly (readonly [number, number])[] = [
+  [6, 18], [13, 15], [9, 11], [20, 19], [17, 8], [27, 13], [33, 18], [31, 7], [38, 12], [24, 5],
+]
+
+function cosmosMemory(g: Grid, level: number): void {
+  FLOATING_BOOKS.slice(0, level).forEach(([x, y], i) => {
+    const color = BOOK_COLORS[i % BOOK_COLORS.length] ?? C.red
+    rect(g, x, y, 4, 2, color)
+    px(g, x, y, C.white)
+    rect(g, x + 1, y + 2, 3, 1, C.stoneDark)
+  })
+}
+
+/** An astronaut drifting across the far dark, feet first, the visor catching the light. */
+function astronaut(g: Grid, t: number): void {
+  const x = 98 + Math.floor(t * 0.8)
+  const y = 2 + (Math.floor(t / 8) % 2)
+  sprite(g, x, y, ['.ss.', 'svvs', 'ssss', '.ss.', 's..s'], { s: C.suit, v: C.visor })
+}
+
+function cosmos(g: Grid, t: number, s: SceneProps, o: { hasClouds: boolean; isPlain: boolean }): void {
+  // The deep and its nebulae are the SVG's own, soft as no pixel can be (scene-svg's backdrop);
+  // drawn plain, the dark is filled here.
+  if (o.isPlain) rect(g, 0, 0, SW, SH, C.deep)
+  // Stars, more than any sky on Earth; the SVG makes some twinkle.
+  for (let i = 0; i < 70; i++) {
+    const x = hash(i * 7 + 11) % SW
+    const y = hash(i * 13 + 3) % 24
+    px(g, x, y, i % 9 === 0 ? C.sky : i % 5 === 0 ? C.light : C.white)
+  }
+  // A ringed planet far off, past the telescope.
+  for (let y = -5; y <= 5; y++) {
+    for (let x = -5; x <= 5; x++) {
+      if (x * x + y * y <= 25) px(g, 152 + x, 10 + y, x + y > 2 ? C.planetDark : C.planet)
+    }
+  }
+  rect(g, 143, 10, 19, 1, C.ring)
+  rect(g, 145, 11, 4, 1, C.ring)
+  rect(g, 156, 9, 4, 1, C.ring)
+  // The rocks everything stands on, one under each zone, gaps of stars between.
+  asteroid(g, 1, 43, 25)
+  asteroid(g, 46, 46, 25)
+  asteroid(g, 94, 40, 25)
+  asteroid(g, 137, 34, 25)
+  asteroid(g, 175, 79, 25)
+  // Drifting library: the books float free (the memory); a lantern drifts by them.
+  rect(g, 25, 14, 3, 1, C.stoneLight)
+  rect(g, 24, 15, 5, 2, C.ember)
+  rect(g, 25, 17, 3, 1, C.stoneLight)
+  // Orbital desk: the board, the calendar and the screen, on their rock.
+  noticeBoard(g, s, C.stoneLight, C.board)
+  calendar(g, t, s, { header: C.magenta, page: C.space, ink: C.cyan, off: C.stoneDark })
+  desk(g, C.stoneLight, C.stone)
+  monitor(g, t, C.metal, true)
+  // Satellite: the terminal, and a probe with its solar wings and a blinking light.
+  terminalBox(g, t, C.metalLight)
+  rect(g, 123, 8, 6, 7, C.metalLight)
+  rect(g, 124, 9, 4, 5, C.metal)
+  rect(g, 116, 9, 6, 4, C.solar)
+  rect(g, 130, 9, 6, 4, C.solar)
+  for (const x of [118, 120, 132, 134]) rect(g, x, 9, 1, 4, C.solarLine)
+  rect(g, 122, 10, 1, 2, C.metal)
+  rect(g, 129, 10, 1, 2, C.metal)
+  px(g, 125, 7, C.light)
+  if (t % 4 < 2) px(g, 126, 6, C.red)
+  // Telescope: on its rock, looking at the planet.
+  rect(g, 160, 14, 8, 2, C.light)
+  rect(g, 159, 13, 2, 2, C.metalLight)
+  rect(g, 163, 16, 1, 6, C.metal)
+  rect(g, 161, 22, 5, 1, C.metal)
+  rect(g, 160, 23, 1, 2, C.metal)
+  rect(g, 166, 23, 1, 2, C.metal)
+  if (t % 8 < 4) px(g, 167, 13, C.red)
+  // Zero-g court: the arcade, a string of beacons.
+  arcadeCabinet(g, t, C.purple, C.metal)
+  for (let x = 189; x < 252; x += 3) px(g, x, 4, (x / 3 + Math.floor(t / 2)) % 4 === 0 ? C.cyan : C.yellow)
+}
+
 // ── The roster ────────────────────────────────────────────────────────────
 
 const ARCADE_HI =
@@ -829,9 +932,36 @@ export const THEMES: Record<Theme, ThemeArt> = {
     isIndoor: false,
     hasDaylight: true,
   },
+  cosmos: {
+    draw: cosmos,
+    parts: [
+      ...COMMON_PARTS,
+      { x: 126, y: 6, w: 1, h: 1, ticks: 4 },
+      { x: 167, y: 13, w: 1, h: 1, ticks: 8 },
+      { x: 177, y: 9, w: 8, h: 7, ticks: 8 },
+      { x: 189, y: 4, w: 63, h: 1, ticks: 8 },
+    ],
+    light: { box: { x: 23, y: 14, w: 7, h: 5 }, glow: LAMP_GLOW('#FFE6A0') },
+    toy: { box: { x: 176, y: 7, w: 10, h: 18 }, hi: ARCADE_HI },
+    sky: null,
+    signs: { fill: '#E6E0FF', stroke: 'none', y: 2.35 },
+    memory: { box: { x: 5, y: 4, w: 38, h: 18 }, draw: cosmosMemory },
+    eggs: { star: { x: 0, y: 0, w: SW, h: 22 }, critter: { box: { x: 96, y: 1, w: 44, h: 8 }, ticks: 48, draw: astronaut } },
+    glows: [
+      { room: 'library', box: { x: 24, y: 15, w: 5, h: 2 }, color: '#FFE6A0', kind: 'lamp' },
+      ...SCREENS,
+      { room: 'terminal', box: { x: 124, y: 9, w: 4, h: 5 }, color: '#7FA8E8', kind: 'leds' },
+      { room: 'web', box: { x: 167, y: 13, w: 1, h: 1 }, color: '#E5484D', kind: 'lamp' },
+      ARCADE_SCREEN,
+      { room: 'game', box: { x: 189, y: 4, w: 63, h: 1 }, color: '#5EE6F0', kind: 'leds' },
+    ],
+    // Open space has no daylight and no walls: lights out, it is dark all round.
+    isIndoor: false,
+    hasDaylight: false,
+  },
 }
 
-export const THEME_ORDER: readonly Theme[] = ['house', 'beach', 'space', 'forest']
+export const THEME_ORDER: readonly Theme[] = ['house', 'beach', 'space', 'forest', 'cosmos']
 
 /** Memory's level when the context is not known yet: a session just begun has read a little. */
 export const MEMORY_UNKNOWN = 2

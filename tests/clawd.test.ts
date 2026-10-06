@@ -9,7 +9,7 @@ import { MEDAL_BOX } from '../hooks/decor'
 import { fileChangeOf } from '../hooks/changes'
 import { needsCommit, parseStatus } from '../hooks/git'
 import { emptyLife, FAMILIES, hatFor, lifeFromDays, medalsOf, palFor, reached, TROPHY_TOTAL } from '../hooks/trophies'
-import { actorTip, composeScene, eggOf, hatRise, layoutFor, SPOT_X, STAR_TICKS } from '../hooks/scene'
+import { actorTip, composeScene, eggOf, floatOf, hatRise, layoutFor, SPOT_X, STAR_TICKS } from '../hooks/scene'
 import { sceneSvg } from '../hooks/scene-svg'
 import { roomSpans } from '../hooks/light'
 import { holidayOf, isSouthern, seasonOf, zoneOf } from '../hooks/seasons'
@@ -297,7 +297,8 @@ describe('trophies', () => {
       expect(differing(composeScene({ ...at(theme), medals: [...medals] }, 0, NOW), composeScene(at(theme), 0, NOW), MEDAL_BOX)).toBeGreaterThan(40)
       for (const hat of ['party', 'crown', 'halo', 'wizard', 'captain', 'flower', 'explorer', 'graduation', 'headphones'] as const) {
         const s = { ...at(theme), hat }
-        const around = { x: SPOT_X.code, y: 8, w: 16, h: 8 }
+        // A floater's hat rides as high as he floats.
+        const around = { x: SPOT_X.code, y: 8 - floatOf(s, 'code'), w: 16, h: 8 }
         expect(differing(composeScene(s, 0, NOW), composeScene(at(theme), 0, NOW), around)).toBeGreaterThan(2)
         const svg = sceneSvg({ ...s, medals: [...medals], pal: 'cat' }, NOW)
         expect(svg.length).toBeLessThan(131072)
@@ -327,7 +328,7 @@ describe('trophies', () => {
     }
     expect((await run('trophies')).text).toContain('已解鎖 1 / 78')
     expect((await run('hat crown')).text).toContain('還沒解鎖王冠')
-    const pane = await $.ui.mount({ plugin: 'clawd-sidekick', surface: 'terminal', component: 'Pane', requestId: 'clawd-trophies', props: { title: '成就', isFocused: true, bodyColumns: 100, placement: 'dock' } } as never)
+    const pane = await $.ui.mount({ plugin: 'clawd-sidekick', surface: 'desktop', component: 'Pane', requestId: 'clawd-trophies', props: { title: '成就', isFocused: true, bodyColumns: 100, placement: 'dock' } } as never)
     expect(await pane.find({ text: /連續開工/ })).toBeDefined()
     expect(await pane.find({ text: /3 天 \/ 7 天/ })).toBeDefined()
     expect(await pane.find({ text: /下一級（銀）：連續 7 天都有開工，可得派對帽/ })).toBeDefined()
@@ -532,7 +533,7 @@ describe('the git safety net and what changed', () => {
     expect(await band.find({ text: /⎇ main ↑1 · 1 個未提交/ })).toBeDefined()
     await $.command.run({ command: 'clawd', args: 'changes', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
     expect(w.opened).toContain('clawd-changes')
-    const pane = await $.ui.mount({ plugin: 'clawd-sidekick', surface: 'terminal', component: 'Pane', requestId: 'clawd-changes', props: { title: '', isFocused: true, bodyColumns: 100, placement: 'dock' } } as never)
+    const pane = await $.ui.mount({ plugin: 'clawd-sidekick', surface: 'desktop', component: 'Pane', requestId: 'clawd-changes', props: { title: '', isFocused: true, bodyColumns: 100, placement: 'dock' } } as never)
     expect(await pane.find({ text: /改了 1 個檔（\+2 −1）· 跑了 1 個指令/ })).toBeDefined()
     expect(await pane.find({ text: 'src/app.ts' })).toBeDefined()
     expect(await pane.find({ text: 'Build the app' })).toBeDefined()
@@ -605,8 +606,6 @@ describe("Clawd's day", () => {
     const card = String((await desktop.find({ type: 'Svg' }))?.props.source)
     expect(card).toContain('1/1')
     expect(card).toContain('連續 2 天')
-    const terminal = await $.ui.mount({ ...(pane as object), surface: 'terminal' } as never)
-    expect(await terminal.find({ text: /連續 2 天/ })).toBeDefined()
   })
 })
 
@@ -621,39 +620,30 @@ describe('the band above the prompt', () => {
     expect(bubbleTop(svg)).toBeLessThan(bubbleTop(sceneSvg(sceneOf('volley', 'night', 'zh', 'house', 'winter'), NOW)) - 3)
   })
 
-  test('the house draws as a Raster on the terminal and an image with hover cards on the desktop', async ($, on) => {
+  test('the house is an image on the desktop, with hover cards over it', async ($, on) => {
     const w = world(on)
     await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
     // The usage figures load in the background once the session starts.
     await w.clock.settle()
-    for (const surface of SURFACES) {
-      const ui = await $.ui.mount({ ...BAND, surface })
-      expect(await ui.find({ text: /我是 Clawd/ })).toBeDefined()
-      expect(await ui.find({ text: /沒有截止日/ })).toBeDefined()
-      expect((await ui.find({ key: 'panel' }))?.props.label).toBe('面板')
-      expect(await ui.find({ text: 'Opus 5.5' })).toBeDefined()
-      expect(await ui.find({ text: /▰▰▱▱▱ 42%/ })).toBeDefined()
-      expect(await ui.find({ text: '1.84' })).toBeDefined()
-      expect(await ui.find({ text: '考我' })).toBeUndefined()
-      expect(await ui.find({ text: /樂團/ })).toBeUndefined()
-      if (surface === 'terminal') {
-        const raster = await ui.find({ type: 'Raster', key: 'house' })
-        expect(raster?.props.columns).toBe(110)
-        expect(raster?.props.rows).toBe(14)
-        expect(await ui.find({ text: /書庫/ })).toBeDefined()
-      } else {
-        // An image, which a new drawing replaces without a blink; the pointer is the band's.
-        const svg = await ui.find({ type: 'Svg' })
-        expect(svg?.props.isInteractive).toBeUndefined()
-        expect(svg?.props.width).toBe(110 * 8)
-        expect(String(svg?.props.source)).toContain('遊戲間')
-        expect(await ui.find({ key: 'room-library' })).toBeDefined()
-        expect(await ui.find({ key: 'clawd-main' })).toBeDefined()
-        expect(await ui.find({ text: /記憶（context）/ })).toBeDefined()
-      }
-      await ui.unmount()
-    }
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    expect(await ui.find({ text: /我是 Clawd/ })).toBeDefined()
+    expect(await ui.find({ text: /沒有截止日/ })).toBeDefined()
+    expect((await ui.find({ key: 'panel' }))?.props.label).toBe('面板')
+    expect(await ui.find({ text: 'Opus 5.5' })).toBeDefined()
+    expect(await ui.find({ text: /▰▰▱▱▱ 42%/ })).toBeDefined()
+    expect(await ui.find({ text: '1.84' })).toBeDefined()
+    expect(await ui.find({ text: '考我' })).toBeUndefined()
+    expect(await ui.find({ text: /樂團/ })).toBeUndefined()
+    // An image, which a new drawing replaces without a blink; the pointer is the band's.
+    const svg = await ui.find({ type: 'Svg' })
+    expect(svg?.props.isInteractive).toBeUndefined()
+    expect(svg?.props.width).toBe(110 * 8)
+    expect(String(svg?.props.source)).toContain('遊戲間')
+    expect(await ui.find({ key: 'room-library' })).toBeDefined()
+    expect(await ui.find({ key: 'clawd-main' })).toBeDefined()
+    expect(await ui.find({ text: /記憶（context）/ })).toBeDefined()
   })
+
 
   test('between ticks the desktop house keeps the same SVG, so its loops never start over', async ($, on) => {
     const w = world(on)
@@ -762,22 +752,33 @@ describe('the band above the prompt', () => {
     expect(await band.find({ text: /布告欄：截止日[\s\S]*Launch/ })).toBeDefined()
   })
 
-  test('on the terminal the whole house shows as wide as it can, painted again every tick', async ($, on) => {
-    const blits: string[] = []
-    on('ui.blit', async (_$, e) => {
-      blits.push(e.key)
-      return { value: {} }
-    })
+  test("on the terminal Clawd draws nothing: the band, the spinner, the hint and the panes stay Claude Code's", async ($, on) => {
     const w = world(on)
+    // The engine's own drawing, whatever the component.
+    on('ui.render', async ($, e) => {
+      const { Text } = $.ui.resolve(e)
+      return h(Text, {}, 'engine') as RenderElement
+    })
     await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
-    const wide = await $.ui.mount({ ...BAND, surface: 'terminal', props: { ...BAND_PROPS, bodyColumns: 300 } })
-    expect((await wide.find({ type: 'Raster', key: 'house' }))?.props.columns).toBe(256)
-    expect(await wide.find({ text: /遊戲間/ })).toBeDefined()
-    await w.clock.advance(500)
-    expect(blits.filter(key => key === 'house').length).toBeGreaterThanOrEqual(3)
-    await wide.unmount()
+    const terminal = (component: string, props: unknown, requestId?: string) =>
+      $.ui.mount({ plugin: 'clawd-sidekick', surface: 'terminal', component, props, ...(requestId === undefined ? {} : { requestId }) } as never)
+    for (const ui of [
+      await terminal('AbovePrompt', BAND_PROPS),
+      await terminal('Spinner', { word: 'Thinking', message: null, suffix: '…', mode: 'thinking' }),
+      await terminal('PromptHint', { isDraft: false, isWorking: false, hint: '? for shortcuts' }),
+      await terminal('Pane', { title: '', isFocused: true, bodyColumns: 90, placement: 'dock' }, 'clawd-recap'),
+    ]) {
+      expect(await ui.find({ text: 'engine' })).toBeDefined()
+      expect(await ui.find({ type: 'Svg' })).toBeUndefined()
+    }
+    // A terminal alone: the commands still answer, and say where Clawd lives.
+    w.surfaces = ['terminal']
+    await $.command.run({ command: 'clawd', args: 'recap', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    expect(w.toasts.some(t => t.includes('Claude 桌面版'))).toBe(true)
+    expect(w.opened).not.toContain('clawd-recap')
     await w.clock.settle()
   })
+
 
   test('one switch puts every light out, from any room or the band, and keeps it for every session', async ($, on) => {
     const w = world(on)
@@ -867,11 +868,6 @@ describe('the band above the prompt', () => {
     expect(await ui.find({ text: /42%/ })).toBeDefined()
     expect(await ui.find({ text: /31%/ })).toBeDefined()
     expect(await ui.find({ text: /這次回覆/ })).toBeDefined()
-    // The terminal's is the banner's whole Clawd beside three lines, not one row of him.
-    const terminal = await $.ui.mount({ ...BAND, surface: 'terminal' })
-    expect((await terminal.find({ type: 'Raster', key: 'face' }))?.props.rows).toBe(3)
-    expect(await terminal.find({ text: /42%/ })).toBeDefined()
-    expect(await terminal.find({ text: /沒有截止日/ })).toBeDefined()
     await w.clock.settle()
   })
 
@@ -998,8 +994,9 @@ describe('the band above the prompt', () => {
     // English beside Claude Code's own words, though Clawd speaks Chinese here.
     expect(await desktop.find({ text: /Standing by/ })).toBeDefined()
     expect(await desktop.find({ text: /\? for shortcuts/ })).toBeDefined()
+    // The terminal's line is the engine's alone.
     const terminal = await hint('terminal', false)
-    expect(await terminal.find({ text: /\? for shortcuts · Clawd · Standing by/ })).toBeDefined()
+    expect(await terminal.find({ text: /Standing by/ })).toBeUndefined()
     const working = await hint('desktop', true)
     expect(await working.find({ type: 'Svg' })).toBeUndefined()
     expect(await working.find({ text: '? for shortcuts' })).toBeDefined()
@@ -1014,11 +1011,6 @@ describe('the band above the prompt', () => {
     world(on)
     await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
     const props = { word: 'Thinking', message: null, suffix: '…', mode: 'thinking' as const }
-    const terminal = await $.ui.mount({ plugin: 'clawd-sidekick', surface: 'terminal', component: 'Spinner', props })
-    expect(await terminal.find({ text: /▐▛███▜▌/, in: 'spinner' })).toBeDefined()
-    expect(await terminal.find({ text: /Thinking…/, in: 'spinner' })).toBeDefined()
-    expect(await terminal.find({ text: /thinking/, in: 'spinner' })).toBeDefined()
-    expect(await terminal.find({ text: /思考中/, in: 'spinner' })).toBeUndefined()
     const desktop = await $.ui.mount({ plugin: 'clawd-sidekick', surface: 'desktop', component: 'Spinner', props })
     expect(await desktop.find({ type: 'Svg' })).toBeDefined()
     expect(await desktop.find({ text: /Thinking…/, in: 'spinner' })).toBeDefined()
@@ -1040,18 +1032,14 @@ describe('the band above the prompt', () => {
     const props = { word: 'Working', message: null, suffix: '…', mode: 'requesting' as const }
     const squashing = 'viewBox="9 6 24 19"'
     let during = ''
-    let duringTerminal = false
     on('session.compact', async () => {
       const ui = await $.ui.mount({ ...SPINNER, surface: 'desktop', props })
       during = String((await ui.find({ type: 'Svg' }))?.props.source)
-      const terminal = await $.ui.mount({ ...SPINNER, surface: 'terminal', props })
-      duringTerminal = (await terminal.find({ text: /[▇▆▅▄▃▂]{7}/, in: 'spinner' })) !== undefined
       return { messages: [{ role: 'user', text: '摘要', toolUses: [] }] } as never
     })
     await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
     await $.session.compact({ trigger: 'manual', messages: [{ role: 'user', text: '摘要', toolUses: [] }] as never })
     expect(during).toContain(squashing)
-    expect(duringTerminal).toBe(true)
     // Done compacting, he is back to thinking.
     const after = await $.ui.mount({ ...SPINNER, surface: 'desktop', props })
     expect(String((await after.find({ type: 'Svg' }))?.props.source)).not.toContain(squashing)

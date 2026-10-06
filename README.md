@@ -1,6 +1,6 @@
 # Clawd Sidekick
 
-**A pixel house for Clawd above your Claude Code prompt.** Clawd walks to the room of whatever Claude is doing, while his crew plays in the game room. Under the house you get the figures you'd normally check the status line for. **It costs you no tokens**: Clawd never calls a model and puts nothing into your conversation.
+**A pixel house for Clawd above your prompt in the Claude desktop app's Code tab.** Clawd walks to the room of whatever Claude is doing, while his crew plays in the game room. Under the house you get the figures you'd normally check the status line for. **It costs you no tokens**: Clawd never calls a model and puts nothing into your conversation.
 
 [繁體中文說明](./README.zh-TW.md)
 
@@ -18,14 +18,15 @@
 | Lookout | searches or fetches the web (the window follows your local time: day, dusk, starry night) |
 | Game room | is idle: the crew lives here |
 
-**Four scenes.** Switch them with the **Scene** button on the band, or with `/clawd scene beach`. Every scene keeps the same five zones, so Clawd and the crew behave the same anywhere:
+**Five scenes.** Switch them with the **Scene** button on the band, or with `/clawd scene beach`. Every scene keeps the same five zones, so Clawd and the crew behave the same anywhere:
 
 - **House**: library, workshop, server room, lookout, game room
 - **Beach**: umbrella, beach desk, lifeguard tower, lighthouse view, beach court with a sandcastle
 - **Space station**: archive pod, lab, reactor, observatory, rec deck
 - **Forest camp**: tent, log desk, radio hut, treehouse, campfire
+- **Cosmos**: open space, where the Clawds float and bob instead of standing: a drifting library whose books float free, an orbital desk, a satellite, a telescope on its rock, a zero-g court, under soft nebulae with far stars sliding by
 
-![The four scenes: the house, the beach at dusk, the space station, the forest camp at night](./docs/scenes.png)
+![The five scenes: open space, the house, the beach at dusk, the forest camp, the space station at night](./docs/scenes.png)
 
 **The crew.** Three Clawds in blue, green and purple beanies:
 
@@ -58,7 +59,7 @@
 
 **Clawd in the conversation.** In the Desktop app, a tool's row shows Clawd at his laptop while it runs; once done, a small Clawd (pleased, or worried if it failed) sits by what it did, with an arrow of his own that opens the command and the first lines of its output.
 
-**Neighbors.** Running Claude Code in more than one terminal or window? The other sessions' Clawds come to visit. Up to two busy neighbors walk in from the right to the room of whatever their Claude is doing, in caps of their own and with their project on their bubble, and walk back out when they stop or their session ends. The band lists the sessions next door. They talk through the plugin's own store on your machine; nothing leaves it.
+**Neighbors.** Running more than one session? The other sessions' Clawds come to visit. Up to two busy neighbors walk in from the right to the room of whatever their Claude is doing, in caps of their own and with their project on their bubble, and walk back out when they stop or their session ends. The band lists the sessions next door. They talk through the plugin's own store on your machine; nothing leaves it.
 
 **Trophies.** 78 goals in 21 families, most in four tiers, from a first commit to a hundred days in a row, a million tool calls or a three-hour turn. Every family you reach hangs a medal under the game room's bunting. Some bring the main Clawd a hat (a party hat, a crown, a halo, a wizard hat…), a pal who walks the floor (a cat, an owl, a little crab), or a golden stamp and seal for your commits and pushes. `/clawd trophies` shows where you stand on each; `/clawd hat` and `/clawd pal` choose what he wears and who walks with him. The days you already worked count from the start.
 
@@ -100,17 +101,16 @@
 
 ![Spring blossoms in the forest camp, its autumn reds and golds, Halloween pumpkins on the beach at dusk, Christmas night in the house with scarves and a Santa hat](./docs/seasons.png)
 
-**Light and air.** In the Desktop app every room is lit by its own lamps and screens: soft pools of light, a glow on each screen, the day coming in at the window, the warm cast of dusk, rooms gone dim after dark with their lamps still on, and a soft shadow under every Clawd. The air moves too: dust drifting in the house's window light, stars twinkling past the station's window, glints on the sea, fireflies at the camp after sundown.
+**Light and air.** Every room is lit by its own lamps and screens: soft pools of light, a glow on each screen, the day coming in at the window, a beam of daylight down from the house's window, open skies blended smooth with a halo round the sun or the moon, the warm cast of dusk, rooms gone dim after dark with their lamps still on, screens and racks that breathe, and a soft shadow under every Clawd. The air moves too: dust drifting in the window light, stars twinkling, glints on the sea, smoke off the campfire, fireflies at the camp after sundown.
 
-**Hover and switch.** In the Desktop app, a room under the pointer lights up and shows a card: what the room is for and what it holds right now (Claude's memory in the library, your deadlines on the board, git in the server room, the view outside, the medals in the game room), with the light switch. One switch puts out the whole place: every room goes dim, the screens go dark and the lamps stop glowing, in every scene and every session. The band has the switch too (the terminal's way to it), and `/clawd lights off` works from the keyboard. A Clawd under the pointer gets hearts and a card saying what he's doing, with a pat.
+**Hover and switch.** A room under the pointer lights up and shows a card: what the room is for and what it holds right now (Claude's memory in the library, your deadlines on the board, git in the server room, the view outside, the medals in the game room), with the light switch. One switch puts out the whole place: every room goes dim, the screens go dark and the lamps stop glowing, in every scene and every session. The band has the switch too, and `/clawd lights off` works from the keyboard. A Clawd under the pointer gets hearts and a card saying what he's doing, with a pat.
 
 With reduced motion turned on in your system settings, the Desktop scene holds still: no loops, no drifting clouds, leaves or motes, no flicker.
 
-**In the terminal** the house fills up to 256 columns (narrower, the view follows Clawd), and every cell is painted with its own background, so no terminal's line spacing shows through as stripes. Rooms switched off, and the house after dark, are tinted dim there too.
 
 <img src="docs/compacting.gif" alt="While the conversation is compacted, Clawd stomps a pile of pages into a bundle" width="310" align="right">
 
-**A Clawd spinner.** The `Thinking…` line becomes a small Clawd who thinks in dots, then sits down at a laptop and types away while Claude works, beside a clock that counts every second. While the conversation is compacted he stomps a pile of pages down into a neat bundle. In the Desktop app, a tool's row in the conversation shows him at the laptop too while the tool runs. Between turns he stands by on the hint line under the prompt: waving when it's your turn, asleep late at night, with how long the last reply took and today's total. These two lines stay in English in either language, beside Claude Code's own words.
+**A Clawd spinner.** The `Thinking…` line becomes a small Clawd who thinks in dots, then sits down at a laptop and types away while Claude works, beside a clock that counts every second. While the conversation is compacted he stomps a pile of pages down into a neat bundle. A tool's row in the conversation shows him at the laptop too while the tool runs. Between turns he stands by on the hint line under the prompt: waving when it's your turn, asleep late at night, with how long the last reply took and today's total. These two lines stay in English in either language, beside Claude Code's own words.
 
 **Clawd's day.** `/clawd recap` (or **Today** in the `/clawd` pane) shows a card of the day so far: how long Clawd worked alongside Claude, turns, tool calls, files edited, commands, tests passed, commits, pushes and tidy-ups, where the day went room by room, the week, and your streak of days in a row. It counts every session and project on the machine, and it's made to be screenshotted and shared.
 
@@ -128,7 +128,7 @@ With reduced motion turned on in your system settings, the Desktop scene holds s
 
 ## Install
 
-You need Claude Code with mods: **v2.1.287+** in the terminal, or **v2.1.286+** in the Desktop app's Code tab. Tested on 2.1.288.
+You need the Claude desktop app's Code tab with mods (**v2.1.286+**; tested on 2.1.288). Clawd lives there: in a terminal session the mod draws nothing and Claude Code looks as it always does, though its work still counts toward your day and your trophies.
 
 ```bash
 claude plugin marketplace add Tunai-0511/clawd-sidekick
@@ -189,9 +189,8 @@ A mod runs with your permissions, so here is everything this one reaches (`claud
 
 ## How it works
 
-- `hooks/themes.ts` draws the four scenes procedurally on a 256 × 28 canvas (`hooks/pixels.ts`). `hooks/scene.ts` adds the Clawds, the crew's places in each game, and what the pointer finds.
-- **Desktop app**: `hooks/scene-svg.ts` turns it into one SVG, drawn as an image so a new drawing replaces the last without a blink. The still scene is drawn once. Each of the scene's moving parts loops as a SMIL flipbook of only the pixels that change, and the game being played is a layer of its own, so their periods never multiply. Walking is `animateTransform`. Over the pixels goes the light (`hooks/light.ts`): per room, a dim veil masked by radial pools around its lights, a blur for their glow, and gradients for depth. What the pointer finds is the band's own: unseen strips over each room and Clawd that, hovered, show a native card and an image of what lights up. `color-scheme: light dark` on the root keeps the frame transparent on any theme. When the system asks for reduced motion, every loop holds its first frame and nothing drifts.
-- **Terminal**: `hooks/raster.ts` draws the house as a `Raster`, two pixels a cell, each cell carrying its own background, up to 256 columns; the band repaints it in place every tick with `$.ui.blit`.
+- `hooks/themes.ts` draws the five scenes procedurally on a 256 × 28 canvas (`hooks/pixels.ts`). `hooks/scene.ts` adds the Clawds (floating, in open space) and the crew's places in each game.
+- `hooks/scene-svg.ts` turns it into one SVG, drawn as an image so a new drawing replaces the last without a blink. The still scene is drawn once. Each of the scene's moving parts loops as a SMIL flipbook of only the pixels that change, and the game being played is a layer of its own, so their periods never multiply. Walking is `animateTransform`. Over the pixels goes the light (`hooks/light.ts`): per room, a dim veil masked by radial pools around its lights, a blur for their glow, and gradients for depth. What the pointer finds is the band's own: unseen strips over each room and Clawd that, hovered, show a native card and an image of what lights up. `color-scheme: light dark` on the root keeps the frame transparent on any theme. When the system asks for reduced motion, every loop holds its first frame and nothing drifts.
 - `hooks/decor.ts` adds the holidays and the falling petals and leaves; `hooks/seasons.ts` works out the season and the holiday; `hooks/events.ts` turns a finished command into a moment (a test run, a commit, a push, a pull request).
 - `hooks/i18n.ts` holds every string in both languages.
 
