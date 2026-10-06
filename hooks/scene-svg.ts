@@ -375,6 +375,17 @@ export function sceneSvg(s: SceneProps, now: number): string {
   )
 }
 
+/** A finished tool row's little Clawd: one still frame, pleased when it went well, worried when it did not. */
+export function doneClawdSvg(isOk: boolean): string {
+  const box: Box = { x: REF - 3, y: 9, w: 24, h: 16 }
+  const g = blank()
+  drawClawd(g, REF, 1, isOk ? 'idle' : 'oops', null, 0, { eyes: isOk ? 'happy' : 'wide' })
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${box.x} ${box.y} ${box.w} ${box.h}" width="100%" height="100%" shape-rendering="crispEdges">` +
+    `<style>:root{color-scheme:light dark;background:transparent}</style>${paths(g, box)}</svg>`
+  )
+}
+
 /**
  * One small Clawd on his own, for the spinner and the folded band:
  * transparent, filling its box. `isOnLaptop` has him typing away on a laptop.

@@ -52,6 +52,12 @@
 
 **Make them yours.** `/clawd name Pip` names the main Clawd, and `/clawd name 1 Juniper` a crew member; `/clawd cap 1 red` gives them a beanie of your colour. Each project remembers the scene you last chose for it. `/clawd birthday 10/31` puts everyone in party hats, with confetti, on your birthday.
 
+**A git safety net.** The band shows the project's branch, how far it is ahead of or behind its upstream, and how many files aren't committed; the figure turns yellow after half an hour of uncommitted work and red after two hours or twenty files. When Claude's edits have sat uncommitted for an hour, Clawd stamps a "Time to commit" between turns, with a word on how many files and unpushed commits are waiting.
+
+**What this session changed.** `/clawd changes` (or **Changes** in the `/clawd` pane) lists every file Claude edited or wrote this session, with the lines it added and removed and a dot on this turn's, and the commands it ran with ✓ or ✗. Handy before you commit.
+
+**Clawd in the conversation.** In the Desktop app, a tool's row shows Clawd at his laptop while it runs; once done, a small Clawd (pleased, or worried if it failed) sits by what it did, with an arrow of his own that opens the command and the first lines of its output.
+
 **Neighbors.** Running Claude Code in more than one terminal or window? The other sessions' Clawds come to visit. Up to two busy neighbors walk in from the right to the room of whatever their Claude is doing, in caps of their own and with their project on their bubble, and walk back out when they stop or their session ends. The band lists the sessions next door. They talk through the plugin's own store on your machine; nothing leaves it.
 
 **Trophies.** 78 goals in 21 families, most in four tiers, from a first commit to a hundred days in a row, a million tool calls or a three-hour turn. Every family you reach hangs a medal under the game room's bunting. Some bring the main Clawd a hat (a party hat, a crown, a halo, a wizard hat…), a pal who walks the floor (a cat, an owl, a little crab), or a golden stamp and seal for your commits and pushes. `/clawd trophies` shows where you stand on each; `/clawd hat` and `/clawd pal` choose what he wears and who walks with him. The days you already worked count from the start.
@@ -136,6 +142,7 @@ Third-party marketplaces don't auto-update by default, and a marketplace can't s
 | Command | What it does |
 | --- | --- |
 | `/clawd` | Open the Clawd Sidekick pane: big Clawd, all your deadlines, Today and Trophies |
+| `/clawd changes` | Every file Claude changed this session (+/− lines) and every command it ran (✓/✗) |
 | `/clawd recap` | Today's card: time worked, the figures, the rooms, the week and your streak |
 | `/clawd trophies` | Every trophy family: your tier, your progress, what the next tier brings |
 | `/clawd hat <name>` · `auto` · `none` | Put on a hat you've earned (`auto`: the finest) |
@@ -163,7 +170,7 @@ These are in `/config`, under the plugin:
 A mod runs with your permissions, so here is everything this one reaches (`claude plugin validate .` lists the same):
 
 - **Model calls and tokens: none.** Clawd never calls a model, never adds to the system prompt or to a tool's result, and its commands answer in a toast rather than in the conversation, so nothing it says is read by the model. Running a `/clawd` or `/deadline` command leaves only its own one-line record, as any slash command does.
-- **Processes**: `date +%z` and `readlink /etc/localtime` once at start, for your time zone and which way the seasons run; `defaults read -g AppleLanguages` once, on macOS, when the language is `auto` and no `LANG` is set.
+- **Processes**: `date +%z` and `readlink /etc/localtime` once at start, for your time zone and which way the seasons run; `defaults read -g AppleLanguages` once, on macOS, when the language is `auto` and no `LANG` is set; and in the project's folder, every 30 seconds and after Claude edits or runs something, `git status --porcelain -b` and `git log -1 --format=%ct`, read-only, for the git safety net.
 - **Storage**: your deadlines, scene, language, pet count, the names, caps and birthday you set, each project's scene, each day's figures for the recap, the running totals for the trophies, and each open session's word to its neighbors (its project and what it's doing, removed when it ends), in the plugin's own store on your machine.
 - **Environment**: reads `LANG`, `LC_ALL`, `LC_MESSAGES` and `TZ`.
 - **Network: none.**

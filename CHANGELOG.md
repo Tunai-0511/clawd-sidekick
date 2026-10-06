@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.15.0
+
+- **A git safety net.** The band shows the branch, ahead/behind its upstream and the uncommitted files, from `git status` and `git log -1` run read-only in the project folder every 30 seconds and after edits and commands. An hour of Claude's edits left uncommitted brings Clawd's stamp and a toast between turns, at most once an hour.
+- **What this session changed.** `/clawd changes` and a **Changes** button list every file Claude edited or wrote this session with its +/− lines (from the tools' own patches) and a mark on this turn's, and the commands it ran with ✓ or ✗.
+- **Finished tool rows on the desktop** show a small Clawd, pleased or worried, what the call did and how it ended, and an arrow of Clawd's own that opens the command and the first lines of its output.
+- Clawd's bubble shows what a command is for (Claude's description) rather than the command itself.
+- The history of the repository was rewritten to remove personal details from old examples and commit identities.
+
 ## 0.14.3
 
 - In the Desktop app, a folded step that is still running ("Checking the changelog…" with spinning dots) shows Clawd at his laptop in the dots' place, with what the step is doing and its clock. Opened, or once done, the row is the app's own again.

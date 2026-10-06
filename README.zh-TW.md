@@ -65,6 +65,19 @@
 - 每個專案會記住你上次選的場景。
 - `/clawd birthday 10/31` 設定生日，那天大家都戴派對帽，滿場飄彩紙。
 
+**Git 安全網**：
+- 數字列顯示專案目前的分支、比遠端多或少幾個 commit，以及有幾個檔案還沒提交。
+- 未提交超過半小時會變黃；超過兩小時或累積到 20 個檔案會變紅。
+- Claude 改的檔案放了一個小時還沒 commit，回合之間 Clawd 會蓋章提醒「該 commit 了」，告訴你有幾個檔案和幾個還沒 push 的 commit。
+
+**這一輪改了什麼**：打 `/clawd changes`，或在 `/clawd` 面板按「改了什麼」，會列出：
+- 這個 session 裡 Claude 改過或新增的每個檔案、加減了幾行，這一回合動過的會標一個點。
+- 跑過的指令，以及成功（✓）或失敗（✗）。
+
+commit 前看一眼很方便。
+
+**對話裡的 Clawd**：桌面版裡，工具執行中時，那一列是抱筆電打字的 Clawd。做完後換成一隻小 Clawd（成功時開心，失敗時緊張），旁邊寫著做了什麼，還有一個展開鈕，可以看指令和輸出的前幾行。
+
 **鄰居**：同時開了好幾個 Claude Code 嗎？其他 session 的 Clawd 會來串門子。
 - 最多兩位正在工作的鄰居會從右邊走進來，站到他的 Claude 正在做的事對應的房間。
 - 鄰居戴著不同顏色的帽子，頭上泡泡寫著他的專案名。
@@ -172,6 +185,7 @@ claude plugin install clawd-sidekick@clawd-sidekick
 | 指令 | 用途 |
 | --- | --- |
 | `/clawd` | 打開面板：大 Clawd、所有截止日、今日戰報和成就 |
+| `/clawd changes` | 這個 session 改過的每個檔案（加減行數）和跑過的每個指令（✓／✗） |
 | `/clawd recap` | 今日戰報：工作時間、各項數字、各房間的時間、這週、連續天數 |
 | `/clawd trophies` | 每一類成就：目前等級、進度、下一級會拿到什麼 |
 | `/clawd hat 名稱`、`auto`、`none` | 戴上已解鎖的帽子（`auto` 戴最好的那頂） |
@@ -197,7 +211,7 @@ claude plugin install clawd-sidekick@clawd-sidekick
 mod 是用你的權限在跑，所以這裡列出它碰到的所有東西（`claude plugin validate .` 列出的也一樣）：
 
 - **模型呼叫和 token：完全沒有。** Clawd 不會呼叫模型，不會改系統提示或工具結果。指令的回應用彈出通知顯示，不會寫進對話，所以模型讀不到。執行 `/clawd` 或 `/deadline` 指令時，對話裡只會留下那個指令本身的一行紀錄，跟任何斜線指令一樣。
-- **執行程式**：啟動時各跑一次 `date +%z` 和 `readlink /etc/localtime` 取得時區，用來判斷時間和南北半球。語言設成 `auto` 又沒有 `LANG` 時，在 macOS 上跑一次 `defaults read -g AppleLanguages`。
+- **執行程式**：啟動時各跑一次 `date +%z` 和 `readlink /etc/localtime` 取得時區，用來判斷時間和南北半球。語言設成 `auto` 又沒有 `LANG` 時，在 macOS 上跑一次 `defaults read -g AppleLanguages`。另外，每 30 秒以及 Claude 改檔或跑指令之後，會在專案資料夾裡跑 `git status --porcelain -b` 和 `git log -1 --format=%ct`，只讀不寫，給 Git 安全網用。
 - **儲存**：截止日、場景、語言、被摸的次數、你取的名字、帽子顏色和生日、每個專案的場景、戰報用的每日數字、成就用的累計數字，以及每個開著的 session 留給鄰居的狀態（專案名和在做什麼，session 結束就刪掉），存在你電腦上這個 plugin 自己的儲存區。
 - **環境變數**：讀取 `LANG`、`LC_ALL`、`LC_MESSAGES`、`TZ`。
 - **網路：完全不連網。**

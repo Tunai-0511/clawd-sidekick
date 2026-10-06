@@ -6,6 +6,8 @@ import { countdown, parseDeadline, urgency } from '../hooks/deadline'
 import { isTestRun, momentOf } from '../hooks/events'
 import { dateOf, dayBefore, emptyDay, poseOf, recapSvg, streakOf } from '../hooks/recap'
 import { MEDAL_BOX } from '../hooks/decor'
+import { fileChangeOf } from '../hooks/changes'
+import { needsCommit, parseStatus } from '../hooks/git'
 import { emptyLife, FAMILIES, hatFor, lifeFromDays, medalsOf, palFor, reached, TROPHY_TOTAL } from '../hooks/trophies'
 import { composeScene, eggOf, hatRise, hitTest, layoutFor, SPOT_X, STAR_TICKS, tipOf } from '../hooks/scene'
 import { sceneSvg } from '../hooks/scene-svg'
@@ -482,6 +484,62 @@ describe('daily life, rare sights and making them yours', () => {
   })
 })
 
+describe('the git safety net and what changed', () => {
+  test('git status reads into a branch, its distance from upstream, and what is uncommitted', async () => {
+    expect(parseStatus('## main...origin/main [ahead 2, behind 1]\n M a.ts\nA  b.ts\n?? c.ts\n')).toEqual({ branch: 'main', ahead: 2, behind: 1, changed: 2, untracked: 1 })
+    expect(parseStatus('## No commits yet on main\n?? a.ts\n')).toEqual({ branch: 'main', ahead: 0, behind: 0, changed: 0, untracked: 1 })
+    expect(parseStatus('## feature\n')).toEqual({ branch: 'feature', ahead: 0, behind: 0, changed: 0, untracked: 0 })
+    expect(parseStatus('fatal: not a git repository')).toBeUndefined()
+    const git = { branch: 'main', ahead: 0, behind: 0, changed: 3, untracked: 0, lastCommitAt: NOW - 3 * 3_600_000 }
+    expect(needsCommit(git, NOW - 59 * 60_000, NOW)).toBe(false)
+    expect(needsCommit(git, NOW - 61 * 60_000, NOW)).toBe(true)
+    expect(needsCommit({ ...git, changed: 0 }, NOW - 61 * 60_000, NOW)).toBe(false)
+  })
+
+  test('an edit counts the lines its patch added and removed; a write knows a new file', async () => {
+    const patch = [{ oldStart: 1, oldLines: 2, newStart: 1, newLines: 3, lines: [' a', '-b', '+c', '+d'] }]
+    expect(fileChangeOf('Edit', { file_path: '/p/a.ts' }, { filePath: '/p/a.ts', structuredPatch: patch })).toEqual({ path: '/p/a.ts', added: 2, removed: 1, isNew: false })
+    expect(fileChangeOf('Write', { file_path: '/p/b.ts', content: 'x\ny' }, { type: 'create', filePath: '/p/b.ts', structuredPatch: [] })).toEqual({ path: '/p/b.ts', added: 2, removed: 0, isNew: true })
+    expect(fileChangeOf('Edit', { file_path: '/p/c.ts', old_string: 'a\nb', new_string: 'a\nc\nd' }, undefined)).toEqual({ path: '/p/c.ts', added: 2, removed: 1, isNew: false })
+    expect(fileChangeOf('Read', { file_path: '/p/a.ts' }, {})).toBeUndefined()
+  })
+
+  test('the session keeps what Claude changed and ran, and the band shows the branch', async ($, on) => {
+    const w = world(on, [], {}, 'zh-Hant-TW', { git: { status: '## main...origin/main [ahead 1]\n M src/app.ts\n', lastCommit: Math.floor(NOW / 1000) - 600 } })
+    on('tool.call', async (_$, e) => {
+      const call = e as unknown as { tool: string; command?: string }
+      if (call.tool === 'Edit') return { result: { filePath: '/Users/me/projects/my-app/src/app.ts', structuredPatch: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 2, lines: ['-a', '+b', '+c'] }] } as never }
+      if (call.command === 'npm test') return { isError: true, result: 'Exit code 1', text: 'Exit code 1' } as never
+      return { result: { stdout: '', stderr: '', interrupted: false } as never }
+    })
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    await $.turn.start({ text: '改一下', turnId: 't1' })
+    await $.tool.call({ tool: 'Edit', file_path: '/Users/me/projects/my-app/src/app.ts', old_string: 'a', new_string: 'b\nc' } as never)
+    await $.tool.call({ tool: 'Bash', command: 'npm run build', description: 'Build the app' } as never)
+    const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    expect(await band.find({ text: /⎇ main ↑1 · 1 個未提交/ })).toBeDefined()
+    await $.command.run({ command: 'clawd', args: 'changes', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    expect(w.opened).toContain('clawd-changes')
+    const pane = await $.ui.mount({ plugin: 'clawd-sidekick', surface: 'terminal', component: 'Pane', requestId: 'clawd-changes', props: { title: '', isFocused: true, bodyColumns: 100, placement: 'dock' } } as never)
+    expect(await pane.find({ text: /改了 1 個檔（\+2 −1）· 跑了 1 個指令/ })).toBeDefined()
+    expect(await pane.find({ text: 'src/app.ts' })).toBeDefined()
+    expect(await pane.find({ text: 'Build the app' })).toBeDefined()
+  })
+
+  test('an hour of edits left uncommitted brings a nudge between turns', async ($, on) => {
+    const w = world(on, [], {}, 'zh-Hant-TW', { now: Date.UTC(2026, 9, 6, 1, 0), git: { status: '## main\n M a.ts\n M b.ts\n', lastCommit: Math.floor(Date.UTC(2026, 9, 5) / 1000) } })
+    on('tool.call', async () => ({ result: { filePath: '/Users/me/projects/my-app/a.ts', structuredPatch: [] } as never }))
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    await $.turn.start({ text: '改', turnId: 't1' })
+    await $.tool.call({ tool: 'Edit', file_path: '/Users/me/projects/my-app/a.ts', old_string: 'x', new_string: 'y' } as never)
+    await $.turn.complete({ turnId: 't1', reason: 'answer', answer: '好', durationMs: 1000 } as never)
+    await w.clock.advance(55 * 60_000)
+    expect(w.toasts.some(t => t.includes('還沒 commit'))).toBe(false)
+    await w.clock.advance(7 * 60_000)
+    expect(w.toasts.some(t => t.includes('2 個檔案改了') && t.includes('還沒 commit'))).toBe(true)
+  })
+})
+
 describe("Clawd's day", () => {
   const busy = { ...emptyDay('2026-10-06'), turns: 14, workMs: 192 * 60_000, tools: 148, edits: 23, runs: 41, rooms: { library: 38, codelab: 61, terminal: 41, web: 8, game: 0 }, testsPassed: 5, testsFailed: 1, commits: 3, pushes: 2 }
 
@@ -757,7 +815,7 @@ describe('the band above the prompt', () => {
     expect(String((await narrow.find({ type: 'Svg' }))?.props.source)).toContain('遊戲間')
   })
 
-  test("a running tool's row on the desktop is Clawd at his laptop; done, or on the terminal, it is the engine's", async ($, on) => {
+  test("a running tool's row on the desktop is Clawd at his laptop; on the terminal it is the engine's", async ($, on) => {
     world(on)
     on('ui.render', { component: 'ToolUse' }, async ($, e) => {
       const { Text } = $.ui.resolve(e)
@@ -777,7 +835,6 @@ describe('the band above the prompt', () => {
     expect(await running.find({ text: /Running a command/, in: 'tool-toolu_1' })).toBeDefined()
     expect(await running.find({ text: /npm test -- --watch=false/, in: 'tool-toolu_1' })).toBeDefined()
     await running.unmount()
-    expect(await (await row('desktop', false)).find({ text: 'engine row: Bash' })).toBeDefined()
     expect(await (await row('terminal', true)).find({ text: 'engine row: Bash' })).toBeDefined()
   })
 
@@ -807,6 +864,33 @@ describe('the band above the prompt', () => {
     expect(await (await step('desktop', false)).find({ text: 'engine step' })).toBeDefined()
     expect(await (await step('desktop', true, true)).find({ text: 'engine step' })).toBeDefined()
     expect(await (await step('terminal', true)).find({ text: 'engine step' })).toBeDefined()
+  })
+
+  test("a finished tool's row on the desktop shows a small Clawd and how it ended, and opens to its command and output", async ($, on) => {
+    world(on)
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    const row = await $.ui.mount({
+      plugin: 'clawd-sidekick',
+      surface: 'desktop',
+      component: 'ToolUse',
+      requestId: 'toolu_2',
+      props: {
+        tool_use_id: 'toolu_2',
+        tool: 'Bash',
+        input: { command: 'npm test', description: 'Run the tests' },
+        isRunning: false,
+        isErrored: false,
+        isInterrupted: false,
+        output: { stdout: 'ok 1 adds\nok 2 subtracts', stderr: '', interrupted: false },
+      },
+    } as never)
+    expect(await row.find({ type: 'Svg' })).toBeDefined()
+    expect(await row.find({ text: 'Run the tests' })).toBeDefined()
+    expect(await row.find({ text: '✓' })).toBeDefined()
+    expect(await row.find({ text: '$ npm test' })).toBeUndefined()
+    await row.press({ key: 'row-toolu_2' })
+    expect(await row.find({ text: '$ npm test' })).toBeDefined()
+    expect(await row.find({ text: 'ok 2 subtracts' })).toBeDefined()
   })
 
   test('between turns Clawd stands by on the hint line, and gives it back while Claude works', async ($, on) => {

@@ -10,15 +10,17 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement } from 'claude-code'
 
-import type { Activity, Day, Deadline, Doing, Egg, Game, Hat, Holiday, Life, Neighbor, Pal, Pose, RoomId, SceneActor, SceneProps, Season, Theme, Tier, TimeOfDay, Trophies, Usage } from '../types'
+import type { Activity, Changes, Day, Deadline, Doing, Egg, Game, GitState, Hat, Holiday, Life, Neighbor, Pal, Pose, RoomId, SceneActor, SceneProps, Season, Theme, Tier, TimeOfDay, Trophies, Usage } from '../types'
 import { countdown, formatDue, newId, parseDeadline, parseOffset, urgency, URGENCY_COLOR } from './deadline'
 import { langOf, say, type Lang } from './i18n'
 import { actorX, eggOf, layoutFor, ROOMS, SH, SPOT_X, SW, type Spot } from './scene'
-import { miniClawdSvg, sceneSvg } from './scene-svg'
+import { doneClawdSvg, miniClawdSvg, sceneSvg } from './scene-svg'
 import { H, W } from './sprite'
 import { THEME_ORDER } from './themes'
 import { clawdSvg } from './svg'
+import { EDITING, fileChangeOf, NO_CHANGES, recordCommand, recordFile, relativePath, totals } from './changes'
 import { isTestRun, momentOf, type GitOperation } from './events'
+import { gitColor, isDirty, needsCommit, parseStatus } from './git'
 import { dateOf, dayBefore, duration, emptyDay, favoriteRoom, poseOf, recapLine, recapSvg, ROOM_IDS, streakOf } from './recap'
 import { holidayOf, seasonOf, zoneOf } from './seasons'
 import {
@@ -42,6 +44,7 @@ type Engine = EngineInterface
 
 const PANE = 'clawd'
 const RECAP = 'clawd-recap'
+const CHANGES_PANE = 'clawd-changes'
 const TROPHY_PANE = 'clawd-trophies'
 
 /** What the spinner says the turn is doing: in English whatever Clawd speaks, beside Claude Code's own `Working…`. */
@@ -67,6 +70,9 @@ const neighborsAtom = atom({ plugin: 'clawd-sidekick', key: 'neighbors' } as con
 const eggAtom = atom({ plugin: 'clawd-sidekick', key: 'egg' } as const, null)
 const birthdayAtom = atom({ plugin: 'clawd-sidekick', key: 'birthday' } as const, '')
 const namesAtom = atom({ plugin: 'clawd-sidekick', key: 'names' } as const, {})
+const gitAtom = atom({ plugin: 'clawd-sidekick', key: 'git' } as const, null)
+const changesAtom = atom({ plugin: 'clawd-sidekick', key: 'changes' } as const, NO_CHANGES)
+const openRowsAtom = atom({ plugin: 'clawd-sidekick', key: 'openRows' } as const, [])
 const seasonPickAtom = atom({ plugin: 'clawd-sidekick', key: 'seasonPick' } as const, 'auto')
 const holidayPickAtom = atom({ plugin: 'clawd-sidekick', key: 'holidayPick' } as const, 'auto')
 
@@ -126,7 +132,8 @@ function describe(tool: string, input: Record<string, unknown>): { pose: Pose; l
   const path = str(input.file_path) || str(input.notebook_path) || str(input.path)
   switch (tool) {
     case 'Bash':
-      return { pose: 'type', label: w.run(clip(str(input.command).split('\n')[0] ?? '', 28)) }
+      // Claude says what a command is for; that reads better than the command itself.
+      return { pose: 'type', label: str(input.description) !== '' ? clip(str(input.description), 28) : w.run(clip(str(input.command).split('\n')[0] ?? '', 28)) }
     case 'Edit':
     case 'MultiEdit':
     case 'Write':
@@ -213,6 +220,10 @@ let ticks = 0
 let busySince = 0
 let lastTurnEndAt = 0
 let lastStretchAt = 0
+/** When the tree last went from clean to dirty (0 while clean), the last git read, and the last nudge to commit. */
+let dirtySince = 0
+let lastGitAt = 0
+let lastNudgeAt = 0
 const BUSY_GAP = 5 * 60_000
 const BREAK_AFTER = 50 * 60_000
 const STRETCH_EVERY = 10 * 60_000
@@ -525,6 +536,27 @@ async function load($: Engine): Promise<void> {
 const CAP_COLORS = ['blue', 'green', 'purple', 'red', 'yellow', 'teal', 'pink'] as const
 const CREW_IDS = ['c1', 'c2', 'c3'] as const
 
+/** What a finished call's row opens to: its command or file, then the first lines of what came back. */
+function rowDetail(tool: string, input: Record<string, unknown>, output: unknown, words: ReturnType<typeof say>): string[] {
+  const lines: string[] = []
+  const command = str(input.command)
+  if (command !== '') lines.push(`$ ${command.split('\n')[0] ?? ''}`)
+  const path = str(input.file_path) || str(input.notebook_path) || str(input.path) || str(input.url) || str(input.pattern) || str(input.query)
+  if (command === '' && path !== '') lines.push(path)
+  const record = (typeof output === 'object' && output !== null ? output : {}) as Record<string, unknown>
+  const change = fileChangeOf(tool, input, output)
+  if (change !== undefined) lines.push(`+${change.added} −${change.removed}`)
+  const text = typeof output === 'string' ? output : [str(record.stdout), str(record.stderr)].filter(t => t !== '').join('\n')
+  if (text !== '') lines.push(...text.split('\n').slice(0, 12).map(line => clip(line, 160)))
+  else if (change === undefined) lines.push(words.rowNoOutput)
+  return lines
+}
+
+/** Opens or closes a finished tool row. */
+async function toggleRow($: Engine, id: string): Promise<void> {
+  await update($, openRowsAtom, rows => (rows.includes(id) ? rows.filter(r => r !== id) : [...rows, id].slice(-50)))
+}
+
 /** Puts the caps the person chose on the crew. */
 async function paintCaps($: Engine): Promise<void> {
   const caps = ((await $.store.get('caps')) as Record<string, string> | undefined) ?? {}
@@ -605,6 +637,8 @@ async function checkClock($: Engine): Promise<void> {
   await arrangeCrew($)
   await lookUp($, now)
   await greetBirthday($, now)
+  await readGit($)
+  await nudgeCommit($, now)
   if (isWorking && busySince > 0 && now - busySince >= BREAK_AFTER && now - lastStretchAt >= STRETCH_EVERY) {
     if (lastStretchAt < busySince) $.ui.toast(say(lang).breakToast(Math.floor((now - busySince) / 60_000)), { timeoutMs: 10_000 })
     lastStretchAt = now
@@ -631,6 +665,42 @@ async function checkClock($: Engine): Promise<void> {
 function answer($: Engine, text: string): { text?: string } {
   $.ui.toast(text, { timeoutMs: 6000 })
   return {}
+}
+
+// ── The git safety net ───────────────────────────────────────────────────
+
+/** Reads the project's git state, at most every five seconds unless forced; null outside a repository. */
+async function readGit($: Engine, isForced = false): Promise<GitState | null> {
+  const now = await $.clock.now()
+  if (!isForced && now - lastGitAt < 5_000) return read($, gitAtom)
+  lastGitAt = now
+  let git: GitState | null = null
+  try {
+    const cwd = await $.session.root()
+    const status = await $.process.run(['git', 'status', '--porcelain=v1', '-b', '--untracked-files=normal'], { cwd, timeoutMs: 3000 })
+    const parsed = status.exitCode === 0 ? parseStatus(status.stdout) : undefined
+    if (parsed !== undefined) {
+      const last = await $.process.run(['git', 'log', '-1', '--format=%ct'], { cwd, timeoutMs: 3000 })
+      git = { ...parsed, lastCommitAt: last.exitCode === 0 ? Number(last.stdout.trim()) * 1000 || 0 : 0 }
+    }
+  } catch {
+    git = null
+  }
+  if (git === null || !isDirty(git)) dirtySince = 0
+  else if (dirtySince === 0) dirtySince = now
+  if (JSON.stringify(git) !== JSON.stringify(await read($, gitAtom))) await update($, gitAtom, () => git)
+  return git
+}
+
+/** Between turns: an hour's edits not committed brings Clawd's stamp and a word, at most once an hour. */
+async function nudgeCommit($: Engine, now: number): Promise<void> {
+  const git = await read($, gitAtom)
+  const changes = await read($, changesAtom)
+  if (isWorking || git === null || changes.files.length === 0 || !needsCommit(git, dirtySince, now) || now - lastNudgeAt < 60 * 60_000) return
+  lastNudgeAt = now
+  const minutes = Math.floor((now - Math.max(dirtySince, git.lastCommitAt)) / 60_000)
+  $.ui.toast(say(lang).commitNudge(git.changed + git.untracked, minutes, git.ahead), { timeoutMs: 10_000 })
+  await flash($, 'stamp', say(lang).commitLabel, 5000, () => settle($))
 }
 
 // ── Rare sights and birthdays ────────────────────────────────────────────
@@ -816,7 +886,7 @@ export const register: Register = (on, options) => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
-    const [doing, deadlines, isCollapsed, actors, usage, game, offset, talk, theme, zone, seasonPick, holidayPick, trophies, neighbors, egg, birthday, names] = await Promise.all([
+    const [doing, deadlines, isCollapsed, actors, usage, game, offset, talk, theme, zone, seasonPick, holidayPick, trophies, neighbors, egg, birthday, names, git] = await Promise.all([
       read($, activity),
       read($, deadlinesAtom),
       read($, collapsedAtom),
@@ -834,6 +904,7 @@ export const register: Register = (on, options) => {
       read($, eggAtom),
       read($, birthdayAtom),
       read($, namesAtom),
+      read($, gitAtom),
       read($, nowAtom),
     ])
     const w = say(talk)
@@ -936,6 +1007,11 @@ export const register: Register = (on, options) => {
           <Text color={ORANGE} bold wrap="truncate-end">
             {`「${doing.label || (isWorking ? w.thinking : w.hello)}」`}
           </Text>
+          {git === null ? null : (
+            <Text color={gitColor(git, dirtySince, now)} dimColor={gitColor(git, dirtySince, now) === undefined}>
+              {w.gitLine(git.branch, git.ahead, git.behind, git.changed + git.untracked)}
+            </Text>
+          )}
           {neighbors.length === 0 ? null : stat(w.neighborsLabel, neighbors.map(n => n.project).join(talk === 'zh' ? '、' : ', '))}
           {usage.model ? <Text dimColor>{usage.model}</Text> : null}
           {usage.contextPercent === null ? null : stat('ctx', `${bar(usage.contextPercent)} ${Math.round(usage.contextPercent)}%`, level(usage.contextPercent))}
@@ -993,11 +1069,41 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  // A tool still running on the desktop: Clawd at his laptop in its row, with
-  // what it is doing, its clock and its command or file. Once it is done the
-  // row is the engine's again, its arrow and its output with it.
+  // A tool's row on the desktop. While it runs: Clawd at his laptop, with what
+  // it is doing, its clock and its command or file. Once done: a small Clawd,
+  // pleased or worried, what it did and how it ended, and an arrow of Clawd's
+  // own that opens the command and the first lines of its output.
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
-    if (e.surface !== 'desktop' || !e.props.isRunning) return next(e)
+    if (e.surface !== 'desktop') return next(e)
+    if (!e.props.isRunning) {
+      const id = e.props.tool_use_id
+      const [talk, open] = await Promise.all([read($, langAtom), read($, openRowsAtom)])
+      const words = say(talk)
+      const done = (e.props.input ?? {}) as Record<string, unknown>
+      const isOk = !e.props.isErrored && !e.props.isInterrupted
+      const what = str(done.description) || describe(e.props.tool, done).label
+      const isOpen = open.includes(id)
+      const { Box, Text, Svg, Button } = $.ui.resolve(e)
+      return (
+        <Box flexDirection="column">
+          <Box flexDirection="row" gap={1} alignItems="center">
+            <Svg source={doneClawdSvg(isOk)} alt="Clawd" width={24} height={16} />
+            <Text wrap="truncate-end">{what}</Text>
+            <Text color={isOk ? '#4CB363' : '#E5484D'}>{e.props.isInterrupted ? words.rowInterrupted : isOk ? '✓' : '✗'}</Text>
+            <Button key={`row-${id}`} label={isOpen ? '⌄' : '›'} plain dimColor onPress={() => toggleRow($, id)} />
+          </Box>
+          {isOpen ? (
+            <Box flexDirection="column" paddingLeft={4}>
+              {rowDetail(e.props.tool, done, e.props.output, words).map((line, i) => (
+                <Text key={`line-${i}`} dimColor wrap="truncate-end">
+                  {line}
+                </Text>
+              ))}
+            </Box>
+          ) : null}
+        </Box>
+      )
+    }
     const input = (e.props.input ?? {}) as Record<string, unknown>
     const detail = str(input.command) || str(input.file_path) || str(input.url) || str(input.query) || str(input.pattern) || str(input.description)
     const { Box, Svg, Client } = $.ui.resolve(e)
@@ -1131,6 +1237,7 @@ export const register: Register = (on, options) => {
           <Box flexDirection="row" gap={1}>
             <Button key="recap" label={w.recapButton} hotkey="r" onPress={() => $.ui.open({ id: RECAP, title: w.recapPaneTitle })} />
             <Button key="trophies" label={w.trophiesButton} hotkey="t" onPress={() => $.ui.open({ id: TROPHY_PANE, title: w.trophiesTitle })} />
+            <Button key="changes" label={w.changesButton} hotkey="c" onPress={() => $.ui.open({ id: CHANGES_PANE, title: w.changesTitle })} />
           </Box>
         </Box>
 
@@ -1146,6 +1253,48 @@ export const register: Register = (on, options) => {
             </Box>
           ))}
         </Box>
+      </Box>
+    )
+  })
+
+  on('ui.render', { component: 'Pane', requestId: CHANGES_PANE }, async ($, e) => {
+    const [talk, changes, git] = await Promise.all([read($, langAtom), read($, changesAtom), read($, gitAtom)])
+    const root = await $.session.root()
+    const w = say(talk)
+    const { Box, Text } = $.ui.resolve(e)
+    const sum = totals(changes)
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Text color={ORANGE} bold>{`── ${w.changesTitle} ──`}</Text>
+        <Text>{sum.files + sum.commands === 0 ? w.changesNone : w.changesSummary(sum.files, sum.added, sum.removed, sum.commands, sum.failed)}</Text>
+        <Text dimColor>{git === null ? w.notARepo : w.gitLine(git.branch, git.ahead, git.behind, git.changed + git.untracked)}</Text>
+        {changes.files.length === 0 ? null : (
+          <Box flexDirection="column">
+            <Text bold>{`${w.changesFiles}  `}<Text color={ORANGE}>{w.changesThisTurn}</Text></Text>
+            {changes.files.map(f => (
+              <Box key={f.path} flexDirection="row" gap={1}>
+                <Text color={ORANGE}>{f.turn === changes.turn ? '●' : ' '}</Text>
+                <Text wrap="truncate-start">{relativePath(f.path, root)}</Text>
+                {f.isNew ? <Text color="#4CB363">new</Text> : null}
+                <Text color="#4CB363">{`+${f.added}`}</Text>
+                <Text color="#E5484D">{`−${f.removed}`}</Text>
+                <Text dimColor>{`×${f.edits}`}</Text>
+              </Box>
+            ))}
+          </Box>
+        )}
+        {changes.commands.length === 0 ? null : (
+          <Box flexDirection="column">
+            <Text bold>{w.changesCommands}</Text>
+            {changes.commands.slice(0, 15).map((c, i) => (
+              <Box key={`cmd-${i}`} flexDirection="row" gap={1}>
+                <Text color={ORANGE}>{c.turn === changes.turn ? '●' : ' '}</Text>
+                <Text color={c.isOk ? '#4CB363' : '#E5484D'}>{c.isOk ? '✓' : '✗'}</Text>
+                <Text wrap="truncate-end">{c.text}</Text>
+              </Box>
+            ))}
+          </Box>
+        )}
       </Box>
     )
   })
@@ -1317,6 +1466,7 @@ export const register: Register = (on, options) => {
     await loadToday($)
     await changeLife($, () => {})
     sessionId = await $.session.id()
+    await readGit($, true)
     await sharePresence($)
     await lookAround($)
     await act($, 'idle', '')
@@ -1385,6 +1535,10 @@ export const register: Register = (on, options) => {
       await update($, birthdayAtom, () => birthday)
       await greetBirthday($, await $.clock.now())
       return answer($, words.birthdaySet(`${month}/${day}`))
+    }
+    if (arg === 'changes' || arg === '改了什麼') {
+      await $.ui.open({ id: CHANGES_PANE, title: say(lang).changesTitle })
+      return {}
     }
     if (arg === 'trophies' || arg === 'trophy' || arg === '成就') {
       await $.ui.open({ id: TROPHY_PANE, title: say(lang).trophiesTitle })
@@ -1501,6 +1655,7 @@ export const register: Register = (on, options) => {
 
   on('turn.start', async ($, e, next) => {
     isWorking = true
+    await update($, changesAtom, (changes): Changes => ({ ...changes, turn: changes.turn + 1 }))
     const started = await $.clock.now()
     if (busySince === 0 || started - lastTurnEndAt > BUSY_GAP) busySince = started
     await update($, usageAtom, (u): Usage => ({ ...u, turnStartedAt: started, tools: 0, edits: 0, runs: 0 }))
@@ -1530,6 +1685,21 @@ export const register: Register = (on, options) => {
     }
     toolStarted.set(e.tool_use_id, Date.now())
     const ran = await next(e).finally(() => toolStarted.delete(e.tool_use_id))
+    try {
+      if (ran.deny === undefined) {
+        const at = await $.clock.now()
+        const failed = ran.isError === true
+        const change = failed ? undefined : fileChangeOf(tool, input, ran.result)
+        if (change !== undefined) await update($, changesAtom, changes => recordFile(changes, change, at))
+        if (tool === 'Bash') {
+          const text = str(input.description) || (str(input.command).split('\n')[0] ?? '')
+          await update($, changesAtom, changes => recordCommand(changes, { text, isOk: !failed, isTest: isTestRun(str(input.command)), at }))
+        }
+        if (tool === 'Bash' || EDITING.has(tool)) await readGit($)
+      }
+    } catch {
+      // A change not counted is no reason to hold up the tool.
+    }
     try {
       const isFailed = ran.deny === undefined && ran.isError === true
       if (isDispatch) await releaseCrew($, e.tool_use_id)

@@ -134,6 +134,21 @@ export type Strings = {
   recapWeek: string
   recapStreak: (days: number) => string
   recapLine: (d: { turns: number; work: string; tools: number; edits: number; passed: number; failed: number; commits: number; pushes: number; streak: number }) => string
+  // The git safety net and this session's changes
+  uncommitted: (n: number) => string
+  commitLabel: string
+  commitNudge: (files: number, minutes: number, ahead: number) => string
+  changesTitle: string
+  changesButton: string
+  changesSummary: (files: number, added: number, removed: number, commands: number, failed: number) => string
+  changesNone: string
+  changesFiles: string
+  changesCommands: string
+  changesThisTurn: string
+  gitLine: (branch: string, ahead: number, behind: number, dirty: number) => string
+  notARepo: string
+  rowInterrupted: string
+  rowNoOutput: string
   // Daily life, rare sights, birthdays, names
   takeBreak: string
   breakToast: (minutes: number) => string
@@ -298,7 +313,7 @@ const zh: Strings = {
   petted: count => `被摸了 ${count} 次`,
   describeClawd: 'Clawd 副駕：打開面板（/clawd recap 今日戰報、/clawd trophies 成就、/clawd scene 換場景、/clawd hide 收合、/clawd lang en 換英文）',
   describeDeadline: '截止日雷達：越接近 Clawd 越慌',
-  hintClawd: '[recap|trophies|hat|pal|name|cap|birthday|scene 名稱|season|holiday|hide|show|lang]',
+  hintClawd: '[changes|recap|trophies|hat|pal|name|cap|birthday|scene 名稱|season|holiday|hide|show|lang]',
   hintDeadline: '[add 12/24 名稱|rm N]',
   folded: 'Clawd 收成一行了，/clawd show 叫他回來。',
   unfolded: 'Clawd 回來了。',
@@ -327,6 +342,20 @@ const zh: Strings = {
   recapStreak: days => (days > 0 ? `連續 ${days} 天` : '今天開工吧'),
   recapLine: d =>
     `今天 ${d.turns} 個回合、工作了 ${d.work}：用了 ${d.tools} 次工具、改了 ${d.edits} 個檔，測試 ${d.passed} 過 ${d.failed} 沒過，${d.commits} 次 commit、${d.pushes} 次 push。連續 ${d.streak} 天。`,
+  uncommitted: n => `${n} 個未提交`,
+  commitLabel: '該 commit 了',
+  commitNudge: (files, minutes, ahead) => `有 ${files} 個檔案改了 ${minutes} 分鐘還沒 commit${ahead > 0 ? `，另外 ${ahead} 個 commit 還沒 push` : ''}。存個檔吧`,
+  changesTitle: '這個 session 改了什麼',
+  changesButton: '改了什麼',
+  changesSummary: (files, added, removed, commands, failed) => `改了 ${files} 個檔（+${added} −${removed}）· 跑了 ${commands} 個指令${failed > 0 ? `（${failed} 個失敗）` : ''}`,
+  changesNone: '這個 session 還沒改任何東西',
+  changesFiles: '檔案',
+  changesCommands: '指令',
+  changesThisTurn: '● 這一回合',
+  gitLine: (branch, ahead, behind, dirty) => `⎇ ${branch}${ahead > 0 ? ` ↑${ahead}` : ''}${behind > 0 ? ` ↓${behind}` : ''}${dirty > 0 ? ` · ${dirty} 個未提交` : ' · 都已提交'}`,
+  notARepo: '這個資料夾不是 git repo',
+  rowInterrupted: '已中斷',
+  rowNoOutput: '（沒有輸出）',
   takeBreak: '休息一下吧',
   breakToast: minutes => `已經連續工作 ${minutes} 分鐘了，起來伸展一下吧`,
   eggStar: '✨ 有流星！快看天空',
@@ -577,7 +606,7 @@ const en: Strings = {
   petted: count => (count === 1 ? 'Petted once' : `Petted ${count} times`),
   describeClawd: 'Clawd Sidekick: open the pane (/clawd recap shows your day, /clawd trophies your trophies, /clawd scene changes the scene, /clawd hide folds the band, /clawd lang zh switches to Chinese)',
   describeDeadline: 'Deadline radar: the closer it gets, the more Clawd frets',
-  hintClawd: '[recap|trophies|hat|pal|name|cap|birthday|scene name|season|holiday|hide|show|lang]',
+  hintClawd: '[changes|recap|trophies|hat|pal|name|cap|birthday|scene name|season|holiday|hide|show|lang]',
   hintDeadline: '[add 12/24 name|rm N]',
   folded: 'Clawd folded into one line. /clawd show brings him back.',
   unfolded: 'Clawd is back.',
@@ -608,6 +637,20 @@ const en: Strings = {
   recapStreak: days => (days === 1 ? '1-day streak' : days > 0 ? `${days}-day streak` : 'Start a streak'),
   recapLine: d =>
     `Today: ${d.turns} turns over ${d.work}, ${d.tools} tool calls, ${d.edits} files edited, tests ${d.passed} passed and ${d.failed} failed, ${d.commits} commits, ${d.pushes} pushes. ${d.streak}-day streak.`,
+  uncommitted: n => `${n} uncommitted`,
+  commitLabel: 'Time to commit',
+  commitNudge: (files, minutes, ahead) => `${files} files changed ${minutes} minutes ago and still not committed${ahead > 0 ? `, and ${ahead} commits not pushed` : ''}. Save your work?`,
+  changesTitle: 'What this session changed',
+  changesButton: 'Changes',
+  changesSummary: (files, added, removed, commands, failed) => `${files} files changed (+${added} −${removed}) · ${commands} commands run${failed > 0 ? ` (${failed} failed)` : ''}`,
+  changesNone: 'Nothing changed in this session yet',
+  changesFiles: 'Files',
+  changesCommands: 'Commands',
+  changesThisTurn: '● this turn',
+  gitLine: (branch, ahead, behind, dirty) => `⎇ ${branch}${ahead > 0 ? ` ↑${ahead}` : ''}${behind > 0 ? ` ↓${behind}` : ''}${dirty > 0 ? ` · ${dirty} uncommitted` : ' · all committed'}`,
+  notARepo: 'Not a git repository',
+  rowInterrupted: 'interrupted',
+  rowNoOutput: '(no output)',
   takeBreak: 'Time for a break',
   breakToast: minutes => `${minutes} minutes at it without a break: time to get up and stretch`,
   eggStar: '✨ A shooting star! Look at the sky',

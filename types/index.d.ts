@@ -232,6 +232,43 @@ export type Trophies = {
   pal: Pal | 'auto' | 'none'
 }
 
+/** The project's git state, as `git status` tells it. */
+export type GitState = {
+  branch: string
+  /** Commits ahead of and behind the upstream; 0 without one. */
+  ahead: number
+  behind: number
+  /** Files changed (staged or not), and files not tracked yet. */
+  changed: number
+  untracked: number
+  /** When the last commit was made; 0 before the first. */
+  lastCommitAt: number
+}
+
+/** A file Claude touched this session: how often, and the lines it added and removed. */
+export type FileChange = {
+  path: string
+  edits: number
+  added: number
+  removed: number
+  isNew: boolean
+  /** The turn it was last touched in, counted from the session's first. */
+  turn: number
+  at: number
+}
+
+/** A command Claude ran this session, and how it ended. */
+export type CommandRun = {
+  /** What it was for, as Claude described it, else the command. */
+  text: string
+  isOk: boolean
+  isTest: boolean
+  turn: number
+  at: number
+}
+
+export type Changes = { files: FileChange[]; commands: CommandRun[]; turn: number }
+
 /** The status line figures: model, context, plan windows, cost, this turn. */
 export type Usage = {
   model: string
@@ -278,6 +315,12 @@ declare module 'claude-code' {
       /** The person's birthday as 'MM-DD', '' when not given. */
       birthday: string
       names: Record<string, string>
+      /** The project's git state; null outside a repository. */
+      git: GitState | null
+      /** What this session changed. */
+      changes: Changes
+      /** The finished tool rows the person opened, by tool_use_id. */
+      openRows: string[]
     }
   }
 }

@@ -17,7 +17,7 @@ export type World = {
   root: string
 }
 
-export type Extra = { zone?: string; now?: number }
+export type Extra = { zone?: string; now?: number; git?: { status: string; lastCommit: number } }
 
 export function world(on: On, replies: string[] = [], stored: Readonly<Record<string, unknown>> = {}, system = 'zh-Hant-TW', extra: Extra = {}): World {
   const w: World = { clock: mock.clock(on, { now: extra.now ?? NOW }), played: 0, toasts: [], opened: [], prompts: [], replies, root: '/Users/me/projects/my-app' }
@@ -28,7 +28,8 @@ export function world(on: On, replies: string[] = [], stored: Readonly<Record<st
   on('session.id', () => ({ value: 'this-session' }))
   on('process.run', (_$, e) => {
     const zone = extra.zone === undefined ? '' : `/var/db/timezone/zoneinfo/${extra.zone}\n`
-    const stdout = e.argv[0] === '/bin/date' ? '+0800\n' : e.argv[0] === '/usr/bin/defaults' ? `(\n    "${system}"\n)\n` : e.argv[0] === 'readlink' ? zone : ''
+    const git = e.argv[0] === 'git' && extra.git !== undefined ? (e.argv[1] === 'status' ? extra.git.status : `${extra.git.lastCommit}\n`) : ''
+    const stdout = git !== '' ? git : e.argv[0] === '/bin/date' ? '+0800\n' : e.argv[0] === '/usr/bin/defaults' ? `(\n    "${system}"\n)\n` : e.argv[0] === 'readlink' ? zone : ''
     return { value: { exitCode: stdout === '' ? 1 : 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
