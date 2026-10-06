@@ -1,0 +1,47 @@
+{
+  "name": "clawd-sidekick",
+  "displayName": "Clawd Sidekick",
+  "version": "0.4.0",
+  "description": "Clawd's pixel house above your prompt: Clawd walks to the room of whatever Claude is doing while his crew plays volleyball, ping-pong, jump rope or blocks (and sleeps at night). Live usage figures, the to-dos Claude hands you, and a deadline radar. English and 繁體中文.",
+  "author": {
+    "name": "Tunai"
+  },
+  "homepage": "https://github.com/Tunai-0511/clawd-sidekick",
+  "repository": "https://github.com/Tunai-0511/clawd-sidekick",
+  "license": "MIT",
+  "keywords": [
+    "mod",
+    "clawd",
+    "pixel-art",
+    "status",
+    "todo",
+    "deadline",
+    "i18n"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "autoTodo": {
+      "type": "boolean",
+      "title": "Note the to-dos Claude hands you",
+      "description": "When a reply looks like it hands you something to do, a small model lists it on the board",
+      "default": true
+    },
+    "todoModel": {
+      "type": "string",
+      "title": "Model for noting to-dos",
+      "description": "A model alias or full id",
+      "default": "haiku"
+    },
+    "language": {
+      "type": "string",
+      "title": "Language / 語言",
+      "description": "auto follows the system language; /clawd lang switches it any time",
+      "options": [
+        "auto",
+        "en",
+        "zh-TW"
+      ],
+      "default": "auto"
+    }
+  }
+}

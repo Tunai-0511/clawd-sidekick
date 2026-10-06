@@ -1,0 +1,14 @@
+{
+  "name": "clawd-sidekick",
+  "owner": {
+    "name": "Tunai"
+  },
+  "description": "Clawd Sidekick: a pixel house for Clawd above your Claude Code prompt",
+  "plugins": [
+    {
+      "name": "clawd-sidekick",
+      "source": "./",
+      "description": "Clawd's pixel house above your prompt: Clawd walks to the room of whatever Claude is doing while his crew plays volleyball, ping-pong, jump rope or blocks (and sleeps at night). Live usage figures, the to-dos Claude hands you, and a deadline radar. English and 繁體中文."
+    }
+  ]
+}
