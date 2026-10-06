@@ -103,6 +103,17 @@ export type SceneActor = {
   agentKey?: string
   /** The subagent's loop id once its first tool call names it. */
   agentId?: string
+  /** A visitor from another session on this machine: its project. */
+  neighbor?: string
+}
+
+/** Another Claude Code session on this machine, as it last said it was. */
+export type Neighbor = {
+  id: string
+  project: string
+  pose: Pose
+  label: string
+  isWorking: boolean
 }
 
 /** Everything the house draws from. */
@@ -259,6 +270,8 @@ declare module 'claude-code' {
       /** Today so far, for the recap card. */
       today: Day | null
       trophies: Trophies
+      /** The other sessions on this machine heard from in the last 45 seconds. */
+      neighbors: Neighbor[]
     }
   }
 }

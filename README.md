@@ -46,6 +46,8 @@
 
 ![The moments in four scenes: Clawd holds up a "?" sign for your OK in the house, stamps a commit at the camp, sends a push off as an envelope on the beach, and carries the station's data off while compacting; the shelves and crystals show how full the context is](./docs/moments-en.png)
 
+**Neighbors.** Running Claude Code in more than one terminal or window? The other sessions' Clawds come to visit. Up to two busy neighbors walk in from the right to the room of whatever their Claude is doing, in caps of their own and with their project on their bubble, and walk back out when they stop or their session ends. The band lists the sessions next door. They talk through the plugin's own store on your machine; nothing leaves it.
+
 **Trophies.** 79 goals in 21 families, most in four tiers, from a first commit to a hundred days in a row, a million tool calls or a three-hour turn. Every family you reach hangs a medal under the game room's bunting. Some bring the main Clawd a hat (a party hat, a crown, a halo, a wizard hat…), a pal who walks the floor (a cat, an owl, a little crab), or a golden stamp and seal for your commits and pushes. `/clawd trophies` shows where you stand on each; `/clawd hat` and `/clawd pal` choose what he wears and who walks with him. The days you already worked count from the start.
 
 ![The medals under the bunting, a crowned Clawd and his cat, in all four scenes](./docs/trophies.png)
@@ -158,7 +160,7 @@ A mod runs with your permissions, so here is everything this one reaches (`claud
 
 - **Model calls**: only after a turn whose reply looks like it hands you something ("you'll need to…", "please upload…"), one short call to `todoModel`. Nothing else calls a model.
 - **Processes**: `date +%z` and `readlink /etc/localtime` once at start, for your time zone and which way the seasons run; `defaults read -g AppleLanguages` once, on macOS, when the language is `auto` and no `LANG` is set.
-- **Storage**: your to-dos, deadlines, scene, language, pet count, each day's figures for the recap and the running totals for the trophies, in the plugin's own store on your machine.
+- **Storage**: your to-dos, deadlines, scene, language, pet count, each day's figures for the recap, the running totals for the trophies, and each open session's word to its neighbors (its project and what it's doing, removed when it ends), in the plugin's own store on your machine.
 - **Environment**: reads `LANG`, `LC_ALL`, `LC_MESSAGES` and `TZ`.
 - **Network: none.**
 

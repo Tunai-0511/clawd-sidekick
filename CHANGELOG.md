@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.0
+
+- **Neighbors**: the other Claude Code sessions on the machine come to visit. Each session tells the others what it is up to through the plugin's store (its project, pose, words and whether it is working) when a turn starts or ends and every 15 seconds, and takes it back when it ends. Up to two busy neighbors walk in from the right to the room of what their Claude is doing, in caps of their own (red, yellow, teal, pink) with their project on the bubble, and walk out when they stop or fall quiet for 45 seconds. They never join the crew's games. The band lists the sessions next door.
+
 ## 0.11.0
 
 - **Trophies**: 79 goals in 21 families, most in four tiers (bronze, silver, gold, legendary), from a first commit to a hundred days in a row, a million tool calls, a sixteen-hour day or a three-hour turn. Each family reached hangs a medal under the game room's bunting, in every scene. Rewards: nine hats for the main Clawd, three pals who walk the floor (a cat, an owl, a little crab), and a golden stamp and seal for commits and pushes. `/clawd trophies` lists them all with your progress; `/clawd hat` and `/clawd pal` choose. The days kept since 0.10.0 count from the start.

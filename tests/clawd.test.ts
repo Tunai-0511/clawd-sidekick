@@ -330,6 +330,35 @@ describe('trophies', () => {
   })
 })
 
+describe('neighbors', () => {
+  const presence = (id: string, project: string, isWorking: boolean, label = '跑 npm test') => ({ id, project, pose: 'type', label, isWorking, at: NOW })
+
+  test('a busy session next door sends its Clawd over; an idle one is only named', async ($, on) => {
+    world(on, [], { 'presence:busy': presence('busy', 'api', true), 'presence:idle': presence('idle', 'web', false, '輪到你了') })
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const svg = String((await ui.find({ type: 'Svg' }))?.props.source)
+    expect(svg).toContain('api・跑 npm test')
+    expect(svg).toContain('鄰居 Clawd（api）')
+    expect(svg).not.toContain('鄰居 Clawd（web）')
+    expect(await ui.find({ text: /api、web/ })).toBeDefined()
+  })
+
+  test('a visitor never joins the crew, and walks out once his session falls quiet', async ($, on) => {
+    const w = world(on, [], { 'presence:busy': presence('busy', 'api', true) })
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    await $.turn.start({ text: '修 bug', turnId: 't1' })
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const during = String((await ui.find({ type: 'Svg' }))?.props.source)
+    expect(during).toContain('在打排球')
+    expect(during).toContain('api・跑 npm test')
+    await w.clock.advance(70_000)
+    const after = String((await ui.find({ type: 'Svg' }))?.props.source)
+    expect(after).not.toContain('api・')
+    expect(after).toContain('在打排球')
+  })
+})
+
 describe("Clawd's day", () => {
   const busy = { ...emptyDay('2026-10-06'), turns: 14, workMs: 192 * 60_000, tools: 148, edits: 23, runs: 41, rooms: { library: 38, codelab: 61, terminal: 41, web: 8, game: 0 }, testsPassed: 5, testsFailed: 1, commits: 3, pushes: 2 }
 

@@ -143,6 +143,9 @@ export type Strings = {
   recapWeek: string
   recapStreak: (days: number) => string
   recapLine: (d: { turns: number; work: string; tools: number; edits: number; passed: number; failed: number; commits: number; pushes: number; streak: number }) => string
+  // Neighbors: the other sessions on this machine
+  neighborClawd: (project: string) => string
+  neighborsLabel: string
   // Trophies
   tiers: Record<Tier, string>
   families: Record<FamilyId, string>
@@ -338,6 +341,8 @@ const zh: Strings = {
   recapStreak: days => (days > 0 ? `連續 ${days} 天` : '今天開工吧'),
   recapLine: d =>
     `今天 ${d.turns} 個回合、工作了 ${d.work}：用了 ${d.tools} 次工具、改了 ${d.edits} 個檔，測試 ${d.passed} 過 ${d.failed} 沒過，${d.commits} 次 commit、${d.pushes} 次 push。連續 ${d.streak} 天。`,
+  neighborClawd: project => `鄰居 Clawd（${project}）`,
+  neighborsLabel: '鄰居',
   tiers: { bronze: '銅', silver: '銀', gold: '金', legend: '傳說' },
   families: {
     streak: '連續開工',
@@ -596,6 +601,8 @@ const en: Strings = {
   recapStreak: days => (days === 1 ? '1-day streak' : days > 0 ? `${days}-day streak` : 'Start a streak'),
   recapLine: d =>
     `Today: ${d.turns} turns over ${d.work}, ${d.tools} tool calls, ${d.edits} files edited, tests ${d.passed} passed and ${d.failed} failed, ${d.commits} commits, ${d.pushes} pushes. ${d.streak}-day streak.`,
+  neighborClawd: project => `Neighbor Clawd (${project})`,
+  neighborsLabel: 'neighbors',
   tiers: { bronze: 'Bronze', silver: 'Silver', gold: 'Gold', legend: 'Legendary' },
   families: {
     streak: 'Streak',

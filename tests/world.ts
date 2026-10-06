@@ -23,6 +23,7 @@ export function world(on: On, replies: string[] = [], stored: Readonly<Record<st
   mock.env(on, { HOME: '/tmp/clawd-test' })
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.root', () => ({ value: '/Users/me/projects/my-app' }))
+  on('session.id', () => ({ value: 'this-session' }))
   on('process.run', (_$, e) => {
     const zone = extra.zone === undefined ? '' : `/var/db/timezone/zoneinfo/${extra.zone}\n`
     const stdout = e.argv[0] === '/bin/date' ? '+0800\n' : e.argv[0] === '/usr/bin/defaults' ? `(\n    "${system}"\n)\n` : e.argv[0] === 'readlink' ? zone : ''

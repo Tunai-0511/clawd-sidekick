@@ -116,7 +116,7 @@ export function layoutFor(game: Game, players: number): { game: Game; slots: rea
 export type Play = { game: Game; slots: readonly Slot[]; isOn: boolean }
 
 export function playOf(s: SceneProps, now: number): Play {
-  const crew = s.actors.filter(a => a.cap !== null && a.agentKey === undefined)
+  const crew = s.actors.filter(a => a.cap !== null && a.agentKey === undefined && a.neighbor === undefined)
   const { game, slots } = layoutFor(s.game, crew.length)
   const isOn =
     slots.length > 0 &&
@@ -125,7 +125,7 @@ export function playOf(s: SceneProps, now: number): Play {
 }
 
 const roleOf = (play: Play, a: SceneActor): string | undefined =>
-  a.agentKey === undefined && a.cap !== null ? play.slots.find(s => s.x === a.toX && s.doing === a.doing)?.role : undefined
+  a.agentKey === undefined && a.neighbor === undefined && a.cap !== null ? play.slots.find(s => s.x === a.toX && s.doing === a.doing)?.role : undefined
 
 type Point = { x: number; y: number }
 
@@ -271,7 +271,8 @@ export function drawBackground(g: Grid, t: number, s: SceneProps, play: Play, op
 
 // ── The Clawds ─────────────────────────────────────────────────────────────
 
-const CAP: Record<string, number> = { blue: C.blue, green: C.green, purple: C.purple }
+/** The crew's beanies, then the visitors' from other sessions. */
+const CAP: Record<string, number> = { blue: C.blue, green: C.green, purple: C.purple, red: C.red, yellow: C.yellow, teal: C.teal, pink: C.pink }
 
 /** Where an actor is at `now`: walking in a straight line at SPEED. */
 export function actorX(actor: SceneActor, now: number): number {
@@ -824,6 +825,7 @@ export function composeScene(s: SceneProps, t: number, now: number, options: Com
 /** What hovering a Clawd says about him. */
 export function actorTip(a: SceneActor, lang: Lang): string {
   const words = say(lang)
+  if (a.neighbor !== undefined) return `${words.neighborClawd(a.neighbor)} · ${a.label || words.doings[a.doing]}`
   const name = a.cap === null ? words.mainClawd : words.crewClawd(words.caps[a.cap] ?? '')
   if (a.agentKey !== undefined) return `${name} · ${words.forSubagent(a.label || words.gettingReady)}`
   if (a.cap === null) return `${name} · ${a.label || words.doings[a.doing]}`

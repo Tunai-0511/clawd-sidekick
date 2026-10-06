@@ -10,7 +10,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement } from 'claude-code'
 
-import type { Activity, Day, Deadline, Doing, Game, Hat, Holiday, Life, Pal, Pose, RoomId, SceneActor, SceneProps, Season, Theme, Tier, TimeOfDay, Todo, Trophies, Usage } from '../types'
+import type { Activity, Day, Deadline, Doing, Game, Hat, Holiday, Life, Neighbor, Pal, Pose, RoomId, SceneActor, SceneProps, Season, Theme, Tier, TimeOfDay, Todo, Trophies, Usage } from '../types'
 import { countdown, formatDue, parseDeadline, parseOffset, urgency, URGENCY_COLOR } from './deadline'
 import { langOf, say, type Lang } from './i18n'
 import { actorX, layoutFor, ROOMS, SH, SPOT_X, SW, type Spot } from './scene'
@@ -65,6 +65,7 @@ const themeAtom = atom({ plugin: 'clawd-sidekick', key: 'theme' } as const, 'hou
 const zoneAtom = atom({ plugin: 'clawd-sidekick', key: 'zone' } as const, '')
 const todayAtom = atom({ plugin: 'clawd-sidekick', key: 'today' } as const, null)
 const trophiesAtom = atom({ plugin: 'clawd-sidekick', key: 'trophies' } as const, NO_TROPHIES)
+const neighborsAtom = atom({ plugin: 'clawd-sidekick', key: 'neighbors' } as const, [])
 const seasonPickAtom = atom({ plugin: 'clawd-sidekick', key: 'seasonPick' } as const, 'auto')
 const holidayPickAtom = atom({ plugin: 'clawd-sidekick', key: 'holidayPick' } as const, 'auto')
 
@@ -202,6 +203,10 @@ let isWorking = false
 let lastUsageAt = 0
 let lastTurnMs = 0
 let ticks = 0
+/** This session's id, under which it tells the others what it is up to. */
+let sessionId = ''
+let sharedAs = ''
+let sharedAt = 0
 
 // ── Clawd and his crew ──────────────────────────────────────────────────
 
@@ -238,7 +243,7 @@ async function arrangeCrew($: Engine): Promise<void> {
   const game = chooseGame(now, await read($, offsetAtom))
   await update($, gameAtom, () => game)
   await update($, actorsAtom, actors => {
-    const free = actors.filter(a => a.cap !== null && a.agentKey === undefined).sort((p, q) => p.id.localeCompare(q.id))
+    const free = actors.filter(a => a.cap !== null && a.agentKey === undefined && a.neighbor === undefined).sort((p, q) => p.id.localeCompare(q.id))
     const { slots } = layoutFor(game, free.length)
     return actors.map(a => {
       const slot = slots[free.indexOf(a)]
@@ -252,7 +257,7 @@ async function arrangeCrew($: Engine): Promise<void> {
 async function assignCrew($: Engine, agentKey: string, label: string): Promise<void> {
   const now = await $.clock.now()
   await update($, actorsAtom, actors => {
-    const free = actors.filter(a => a.cap !== null && a.agentKey === undefined).sort((p, q) => p.id.localeCompare(q.id))[0]
+    const free = actors.filter(a => a.cap !== null && a.agentKey === undefined && a.neighbor === undefined).sort((p, q) => p.id.localeCompare(q.id))[0]
     if (free === undefined) return actors
     return actors.map(a => (a.id === free.id ? { ...moveActor(a, crewX(a.id, 'code'), 'think', label, now), agentKey } : a))
   })
@@ -422,6 +427,7 @@ function onPet($: Engine, id: string): void {
     })
     if (id !== 'main') {
       await update($, actorsAtom, actors => actors.map(a => (a.id === id && a.agentKey === undefined ? { ...a, doing: 'love' } : a)))
+      if (id.startsWith('n:')) return
       $.clock.after(2000, () => void arrangeCrew($))
       return
     }
@@ -599,8 +605,90 @@ async function checkClock($: Engine): Promise<void> {
 }
 
 /** Every five seconds: the turn clock while working, the rest every thirty. */
+// ── Neighbors: the other sessions on this machine ────────────────────────
+
+type Presence = Neighbor & { at: number }
+
+/** How long a session's word holds before it counts as gone, and before its record is cleared. */
+const HEARD_MS = 45_000
+const GONE_MS = 10 * 60_000
+const VISITOR_CAPS = ['red', 'yellow', 'teal', 'pink'] as const
+const WORK_SPOTS: readonly Spot[] = ['library', 'board', 'code', 'bash', 'web']
+
+/** Tells the other sessions what this one is up to: when it changes, and every 15 seconds. */
+async function sharePresence($: Engine): Promise<void> {
+  if (sessionId === '') return
+  const [doing, project] = await Promise.all([read($, activity), read($, projectAtom)])
+  const now = await $.clock.now()
+  const me: Presence = { id: sessionId, project, pose: doing.pose, label: doing.label, isWorking, at: now }
+  const said = JSON.stringify({ ...me, at: 0 })
+  if (said === sharedAs && now - sharedAt < 15_000) return
+  sharedAs = said
+  sharedAt = now
+  await $.store.set(`presence:${sessionId}`, me)
+}
+
+/** Hears from the other sessions, clears the long-gone, and has the busy ones visit. */
+async function lookAround($: Engine): Promise<void> {
+  if (sessionId === '') return
+  const now = await $.clock.now()
+  const heard: Neighbor[] = []
+  for (const key of await $.store.keys()) {
+    if (!key.startsWith('presence:') || key === `presence:${sessionId}`) continue
+    const p = (await $.store.get(key)) as Presence | undefined
+    if (p === undefined) continue
+    if (now - p.at > GONE_MS) await $.store.delete(key)
+    else if (now - p.at <= HEARD_MS) heard.push({ id: p.id, project: p.project, pose: p.pose, label: p.label, isWorking: p.isWorking })
+  }
+  heard.sort((a, b) => a.id.localeCompare(b.id))
+  if (JSON.stringify(heard) !== JSON.stringify(await read($, neighborsAtom))) await update($, neighborsAtom, () => heard)
+  await placeVisitors($, heard)
+}
+
+/** The free work spot nearest `x`, clear of everyone already standing at one. */
+function freeSpot(x: number, taken: readonly number[]): number {
+  const spots = WORK_SPOTS.map(spot => SPOT_X[spot]).sort((a, b) => Math.abs(a - x) - Math.abs(b - x))
+  return spots.find(spot => taken.every(t => Math.abs(t - spot) >= 14)) ?? x
+}
+
+const capOf = (id: string): string => VISITOR_CAPS[[...id].reduce((sum, ch) => sum + ch.charCodeAt(0), 0) % VISITOR_CAPS.length] ?? 'red'
+
+/**
+ * Up to two busy neighbors walk in from the right to the room of what they
+ * are doing (another if it is taken), their project on their bubble; when
+ * they stop, or their session ends, they walk back out.
+ */
+async function placeVisitors($: Engine, heard: readonly Neighbor[]): Promise<void> {
+  const now = await $.clock.now()
+  const busy = heard.filter(n => n.isWorking).slice(0, 2)
+  const words = say(lang)
+  const current = await read($, actorsAtom)
+  const next = (() => {
+    const locals = current.filter(a => a.neighbor === undefined)
+    const taken = locals.filter(a => a.cap === null || a.agentKey !== undefined).map(a => a.toX)
+    const visitors: SceneActor[] = []
+    for (const n of busy) {
+      const id = `n:${n.id}`
+      const place = PLACE[n.pose]
+      const x = freeSpot(SPOT_X[place.spot ?? 'code'], taken)
+      taken.push(x)
+      const label = clip(`${n.project}・${n.label || words.doings[place.doing]}`, 18)
+      const was = current.find(a => a.id === id)
+      visitors.push(was === undefined ? { id, cap: capOf(n.id), fromX: SW + 2, toX: x, departAt: now, doing: place.doing, label, neighbor: n.project } : moveActor(was, x, place.doing, label, now))
+    }
+    for (const was of current.filter(a => a.neighbor !== undefined && !visitors.some(v => v.id === a.id))) {
+      if (was.toX < SW) visitors.push(moveActor(was, SW + 2, 'idle', '', now))
+      else if (actorX(was, now) < SW) visitors.push(was)
+    }
+    return [...locals, ...visitors]
+  })()
+  if (JSON.stringify(next) !== JSON.stringify(current)) await update($, actorsAtom, () => next)
+}
+
 async function tickClock($: Engine): Promise<void> {
   ticks += 1
+  await sharePresence($)
+  await lookAround($)
   if (ticks % 6 === 0) await checkClock($)
   else if (isWorking) await update($, nowAtom, () => Date.now())
   if (isWorking || ticks % 6 === 0) await refreshUsage($)
@@ -667,7 +755,7 @@ export const register: Register = (on, options) => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
-    const [doing, todos, deadlines, isCollapsed, project, actors, usage, game, offset, talk, theme, zone, seasonPick, holidayPick, trophies] = await Promise.all([
+    const [doing, todos, deadlines, isCollapsed, project, actors, usage, game, offset, talk, theme, zone, seasonPick, holidayPick, trophies, neighbors] = await Promise.all([
       read($, activity),
       read($, todosAtom),
       read($, deadlinesAtom),
@@ -683,6 +771,7 @@ export const register: Register = (on, options) => {
       read($, seasonPickAtom),
       read($, holidayPickAtom),
       read($, trophiesAtom),
+      read($, neighborsAtom),
       read($, nowAtom),
     ])
     const w = say(talk)
@@ -783,6 +872,7 @@ export const register: Register = (on, options) => {
           <Text color={ORANGE} bold wrap="truncate-end">
             {`「${doing.label || (isWorking ? w.thinking : w.hello)}」`}
           </Text>
+          {neighbors.length === 0 ? null : stat(w.neighborsLabel, neighbors.map(n => n.project).join(talk === 'zh' ? '、' : ', '))}
           {usage.model ? <Text dimColor>{usage.model}</Text> : null}
           {usage.contextPercent === null ? null : stat('ctx', `${bar(usage.contextPercent)} ${Math.round(usage.contextPercent)}%`, level(usage.contextPercent))}
           {usage.fiveHour === null ? null : stat('5h', `${Math.round(usage.fiveHour)}%`, level(usage.fiveHour))}
@@ -1099,6 +1189,21 @@ export const register: Register = (on, options) => {
 
   // ── Session and commands ────────────────────────────────────────────────
 
+  // A session that ends takes its word back, so its visitors leave at once.
+  on('session.end', async ($, e, next) => {
+    const ending = sessionId
+    // Nothing said after this point: a turn still winding down must not bring the word back.
+    sessionId = ''
+    if (ending !== '') {
+      try {
+        await $.store.delete(`presence:${ending}`)
+      } catch {
+        // Unheard for long enough, it counts as gone anyway.
+      }
+    }
+    return next(e)
+  })
+
   on('session.start', async ($, e, next) => {
     const started = await next(e)
     await load($)
@@ -1116,6 +1221,9 @@ export const register: Register = (on, options) => {
     await update($, langAtom, () => lang)
     await loadToday($)
     await changeLife($, () => {})
+    sessionId = await $.session.id()
+    await sharePresence($)
+    await lookAround($)
     await act($, 'idle', '')
     $.clock.every(5_000, () => void tickClock($))
     void checkClock($)
@@ -1302,6 +1410,8 @@ export const register: Register = (on, options) => {
     await update($, usageAtom, (u): Usage => ({ ...u, turnStartedAt: started, tools: 0, edits: 0, runs: 0 }))
     await act($, 'think', say(lang).thinking)
     await arrangeCrew($)
+    // The neighbors hear at once that this session got busy.
+    await sharePresence($)
     return next(e)
   })
 
@@ -1428,13 +1538,16 @@ export const register: Register = (on, options) => {
     await arrangeCrew($)
     if (e.reason === 'aborted') {
       await act($, 'idle', say(lang).interrupted)
+      await sharePresence($)
       return result
     }
     if (e.reason !== 'answer') {
       await act($, 'oops', say(lang).turnError)
+      await sharePresence($)
       return result
     }
     await act($, 'wait', say(lang).yourTurn)
+    await sharePresence($)
     if (settings.isAutoTodo && shouldExtract(e.answer)) {
       const answer = e.answer
       $.clock.after(50, () => void extractTodos($, answer))
