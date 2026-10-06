@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.1
+
+- Removed 0.14.3's step-row Clawd: the Desktop app draws a folded step's header itself, so it never showed.
+
 ## 0.15.0
 
 - **A git safety net.** The band shows the branch, ahead/behind its upstream and the uncommitted files, from `git status` and `git log -1` run read-only in the project folder every 30 seconds and after edits and commands. An hour of Claude's edits left uncommitted brings Clawd's stamp and a toast between turns, at most once an hour.

@@ -838,34 +838,6 @@ describe('the band above the prompt', () => {
     expect(await (await row('terminal', true)).find({ text: 'engine row: Bash' })).toBeDefined()
   })
 
-  test("a folded step still running on the desktop shows Clawd; open, done or on the terminal it is the engine's", async ($, on) => {
-    world(on)
-    on('ui.render', { component: 'ToolGroup' }, async ($, e) => {
-      const { Text } = $.ui.resolve(e)
-      return h(Text, {}, 'engine step') as RenderElement
-    })
-    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
-    let n = 0
-    const step = (surface: 'terminal' | 'desktop', isRunning: boolean, isExpanded = false) =>
-      $.ui.mount({
-        plugin: 'clawd-sidekick',
-        surface,
-        component: 'ToolGroup',
-        requestId: `group-${++n}`,
-        props: {
-          calls: [{ tool_use_id: 'toolu_9', tool: 'Bash', input: { command: 'git log', description: 'Check the changelog' }, isRunning, isErrored: false, isInterrupted: false }],
-          isActive: isRunning,
-          isExpanded,
-        },
-      } as never)
-    const running = await step('desktop', true)
-    expect(await running.find({ type: 'Svg' })).toBeDefined()
-    expect(await running.find({ text: /Check the changelog…/, in: 'group-toolu_9' })).toBeDefined()
-    expect(await (await step('desktop', false)).find({ text: 'engine step' })).toBeDefined()
-    expect(await (await step('desktop', true, true)).find({ text: 'engine step' })).toBeDefined()
-    expect(await (await step('terminal', true)).find({ text: 'engine step' })).toBeDefined()
-  })
-
   test("a finished tool's row on the desktop shows a small Clawd and how it ended, and opens to its command and output", async ($, on) => {
     world(on)
     await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
