@@ -136,7 +136,7 @@ commit 前看一眼很方便。
 
 **滑鼠互動（桌面版）**：
 - 移到房間上，那個房間會亮起來，並浮出一張卡片：這個房間是做什麼的、現在有什麼（書庫是 Claude 的記憶、布告欄是你的截止日、機房是 git 狀態、瞭望台是窗外、遊戲間是獎牌），還有一個開關燈的按鈕。
-- 關燈的房間會變暗、螢幕熄掉、檯燈不再發光，每個場景、每個 session 都一樣。也可以打 `/clawd lights off`，終端機也適用。
+- 一個開關就是全部一起：所有房間一起變暗、螢幕熄掉、檯燈不再發光，每個場景、每個 session 都一樣。band 下排也有這顆開關（終端機就是按這顆），也可以打 `/clawd lights off`。
 - 移到 Clawd 身上會冒愛心，卡片寫著他在做什麼，還有「摸摸」按鈕。
 
 系統開啟「減少動態效果」時，桌面版的場景會停在靜止畫面，雲、落葉、灰塵都不會飄，火光也不會閃。
@@ -202,7 +202,7 @@ claude plugin install clawd-sidekick@clawd-sidekick
 | `/clawd changes` | 這個 session 改過的每個檔案（加減行數）和跑過的每個指令（✓／✗） |
 | `/clawd recap` | 今日戰報：工作時間、各項數字、各房間的時間、這週、連續天數 |
 | `/clawd summary` | Session 結算：工作時間、回覆、改過的檔、指令、commit、花費 |
-| `/clawd lights off`、`on`、`off library` | 開關燈，可以全部或單一房間（library、codelab、terminal、web、game） |
+| `/clawd lights off`、`on` | 全部關燈或開燈（`off library` 這樣可以只關一個房間） |
 | `/clawd trophies` | 每一類成就：目前等級、進度、下一級會拿到什麼 |
 | `/clawd hat 名稱`、`auto`、`none` | 戴上已解鎖的帽子（`auto` 戴最好的那頂） |
 | `/clawd pal 名稱`、`auto`、`none` | 選在地上散步的夥伴 |

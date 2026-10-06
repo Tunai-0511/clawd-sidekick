@@ -746,7 +746,6 @@ function houseZones($: Engine, ui: Elements['vscode'], s: SceneProps, o: { width
       web: s.theme === 'space' ? w.outsideSpace : w.outside[s.time],
       game: s.medals.length === 0 ? w.toys[s.theme] : `${w.toys[s.theme]}\n${w.medalsTip(s.trophyCount[0], s.trophyCount[1])}`,
     }
-    const isDark = s.dark.includes(span.id)
     const hasSwitch = art.glows.some(g => g.room === span.id && isSwitched(g))
     const lines = [
       <Text color={ORANGE} bold>
@@ -757,7 +756,8 @@ function houseZones($: Engine, ui: Elements['vscode'], s: SceneProps, o: { width
       </Text>,
       ...(info[span.id] === '' ? [] : [<Text wrap="wrap">{info[span.id]}</Text>]),
     ]
-    const buttons = hasSwitch ? [<Button key={`light-${span.id}`} label={isDark ? w.lightOn : w.lightOff} onPress={() => toggleLight($, span.id)} />] : []
+    // One switch for the whole place, from any room that has lights.
+    const buttons = hasSwitch ? [<Button key={`light-${span.id}`} label={isAllDark(s.dark) ? w.lightOn : w.lightOff} onPress={() => toggleLights($)} />] : []
     zones.push(
       <Box key={`room-${span.id}`} position="absolute" top={0} bottom={0} left={left} width={zoneWidth}>
         {glow(roomHoverSvg(s, pixels(left), pixels(zoneWidth)), zoneWidth)}
@@ -810,8 +810,11 @@ async function setLights($: Engine, rooms: readonly RoomId[], isOn: boolean): Pr
   await $.store.set('darkRooms', dark)
 }
 
-async function toggleLight($: Engine, room: RoomId): Promise<void> {
-  await setLights($, [room], (await read($, darkRoomsAtom)).includes(room))
+const isAllDark = (dark: readonly RoomId[]): boolean => ROOM_IDS.every(id => dark.includes(id))
+
+/** The one switch: every room off, or, once they all are, every room on. */
+async function toggleLights($: Engine): Promise<void> {
+  await setLights($, ROOM_IDS, isAllDark(await read($, darkRoomsAtom)))
 }
 
 // ── The session's summary ────────────────────────────────────────────────
@@ -1293,6 +1296,7 @@ export const register: Register = (on, options) => {
           <Box flexGrow={1} />
           <Button key="panel" label={w.list} hotkey="l" onPress={() => $.ui.open({ id: PANE, title: w.paneTitle })} />
           {e.surface === 'terminal' ? null : <Button key="pet" label={w.pet} onPress={() => onPet($, 'main')} />}
+          <Button key="lights" label={isAllDark(dark) ? w.lightOn : w.lightOff} onPress={() => toggleLights($)} />
           <Button key="scene" label={w.scene(w.themes[theme])} hotkey="s" onPress={() => setTheme($, 'next')} />
           {langButton}
           <Button key="hide" label={w.hide} plain dimColor onPress={() => setCollapsed($, true)} />

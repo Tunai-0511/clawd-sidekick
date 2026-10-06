@@ -779,7 +779,7 @@ describe('the band above the prompt', () => {
     await w.clock.settle()
   })
 
-  test('over a room on the desktop, a card with its light switch; off, the room dims, in every session', async ($, on) => {
+  test('one switch puts every light out, from any room or the band, and keeps it for every session', async ($, on) => {
     const w = world(on)
     await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
@@ -787,12 +787,19 @@ describe('the band above the prompt', () => {
     expect(button?.props.label).toBe('💡 關燈')
     expect(String((await ui.find({ type: 'Svg' }))?.props.source)).not.toContain('veil-library')
     await ui.press({ key: 'light-library' })
-    expect(w.store.get('darkRooms')).toEqual(['library'])
+    expect(w.store.get('darkRooms')).toEqual(['library', 'codelab', 'terminal', 'web', 'game'])
     expect((await ui.find({ key: 'light-library' }))?.props.label).toBe('💡 開燈')
-    expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toContain('mask="url(#veil-library)"')
+    expect((await ui.find({ key: 'lights' }))?.props.label).toBe('💡 開燈')
+    const dark = String((await ui.find({ type: 'Svg' }))?.props.source)
+    for (const room of ['library', 'codelab', 'terminal', 'game']) expect(dark).toContain(`mask="url(#veil-${room})"`)
+    // The band's own switch, the one the terminal has, turns them all back on.
+    await ui.press({ key: 'lights' })
+    expect(w.store.get('darkRooms')).toEqual([])
     // A room with nothing to switch, the house's lookout, has no button.
     expect(await ui.find({ key: 'light-web' })).toBeUndefined()
     const run = (args: string) => $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    await run('lights off')
+    expect(w.store.get('darkRooms')).toHaveLength(5)
     await run('lights on')
     expect(w.store.get('darkRooms')).toEqual([])
     await run('lights off terminal')

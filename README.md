@@ -102,7 +102,7 @@
 
 **Light and air.** In the Desktop app every room is lit by its own lamps and screens: soft pools of light, a glow on each screen, the day coming in at the window, the warm cast of dusk, rooms gone dim after dark with their lamps still on, and a soft shadow under every Clawd. The air moves too: dust drifting in the house's window light, stars twinkling past the station's window, glints on the sea, fireflies at the camp after sundown.
 
-**Hover and switch.** In the Desktop app, a room under the pointer lights up and shows a card: what the room is for and what it holds right now (Claude's memory in the library, your deadlines on the board, git in the server room, the view outside, the medals in the game room), with its light switch. Switch a room off and it goes dim, its screens go dark and its lamps stop glowing, in every scene and every session; `/clawd lights off` does it from the keyboard, the terminal included. A Clawd under the pointer gets hearts and a card saying what he's doing, with a pat.
+**Hover and switch.** In the Desktop app, a room under the pointer lights up and shows a card: what the room is for and what it holds right now (Claude's memory in the library, your deadlines on the board, git in the server room, the view outside, the medals in the game room), with the light switch. One switch puts out the whole place: every room goes dim, the screens go dark and the lamps stop glowing, in every scene and every session. The band has the switch too (the terminal's way to it), and `/clawd lights off` works from the keyboard. A Clawd under the pointer gets hearts and a card saying what he's doing, with a pat.
 
 With reduced motion turned on in your system settings, the Desktop scene holds still: no loops, no drifting clouds, leaves or motes, no flicker.
 
@@ -155,7 +155,7 @@ Third-party marketplaces don't auto-update by default, and a marketplace can't s
 | `/clawd changes` | Every file Claude changed this session (+/− lines) and every command it ran (✓/✗) |
 | `/clawd recap` | Today's card: time worked, the figures, the rooms, the week and your streak |
 | `/clawd summary` | This session's card: time worked, replies, files changed, commands, commits, cost |
-| `/clawd lights off` · `on` · `off library` | Switch the lights, everywhere or in one room (library, codelab, terminal, web, game) |
+| `/clawd lights off` · `on` | Put every light out, or back on (`off library` and the like switch one room) |
 | `/clawd trophies` | Every trophy family: your tier, your progress, what the next tier brings |
 | `/clawd hat <name>` · `auto` · `none` | Put on a hat you've earned (`auto`: the finest) |
 | `/clawd pal <name>` · `auto` · `none` | Choose the pal who walks the floor |
