@@ -27,6 +27,9 @@ type Engine = EngineInterface
 
 const PANE = 'clawd'
 const RECAP = 'clawd-recap'
+
+/** What the spinner says the turn is doing: in English whatever Clawd speaks, beside Claude Code's own `Working…`. */
+const MODE_WORDS = { requesting: 'requesting', responding: 'responding', thinking: 'thinking', 'tool-input': 'preparing a tool', 'tool-use': 'using tools' } as const
 const ORANGE = '#D97757'
 /** CSS pixels a desktop cell is taken to be, to size the house's frame. */
 const CELL_PX = 8
@@ -695,7 +698,7 @@ export const register: Register = (on, options) => {
     const props = {
       word: e.props.message ?? e.props.word,
       suffix: e.props.suffix,
-      mode: say(talk).modes[mode],
+      mode: MODE_WORDS[mode],
       startedAt: usage.turnStartedAt > 0 ? usage.turnStartedAt : Date.now(),
       doing,
       isTerminal: e.surface === 'terminal',
@@ -719,7 +722,8 @@ export const register: Register = (on, options) => {
   // Between turns, Clawd stands by on the prompt's hint line: what he is up
   // to, how long the last turn took, how long today has run. The terminal
   // keeps the engine's line and its live pills and adds a tail; the desktop
-  // draws him beside the engine's own hint.
+  // draws him beside the engine's own hint. Like the spinner, the line is in
+  // English whatever Clawd speaks, beside Claude Code's own words.
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
     if (e.props.isWorking || e.props.isDraft) return next(e)
     const [doing, actors, game, today, offset, talk, now] = await Promise.all([
@@ -731,14 +735,22 @@ export const register: Register = (on, options) => {
       read($, langAtom),
       read($, nowAtom),
     ])
-    const w = say(talk)
+    const en = say('en')
     const isAsleep = game === 'sleep' && !isWorking
-    const word = isAsleep ? w.doings.sleep : doing.label || w.idle
+    const word = isAsleep
+      ? 'Asleep'
+      : doing.pose === 'wait'
+        ? en.yourTurn
+        : doing.pose === 'oops'
+          ? en.turnError
+          : doing.label === say(talk).interrupted
+            ? en.interrupted
+            : en.idle
     const details: string[] = []
-    if (lastTurnMs > 0) details.push(`${w.lastTurn} ${Math.floor(lastTurnMs / 60_000)}:${String(Math.floor((lastTurnMs % 60_000) / 1000)).padStart(2, '0')}`)
-    if (today !== null && today.date === dateOf(now || (await $.clock.now()), offset) && today.workMs > 0) details.push(w.todayWorked(duration(today.workMs, talk)))
+    if (lastTurnMs > 0) details.push(`${en.lastTurn} ${Math.floor(lastTurnMs / 60_000)}:${String(Math.floor((lastTurnMs % 60_000) / 1000)).padStart(2, '0')}`)
+    if (today !== null && today.date === dateOf(now || (await $.clock.now()), offset) && today.workMs > 0) details.push(en.todayWorked(duration(today.workMs, 'en')))
     if (e.surface === 'terminal') {
-      return next({ ...e, props: { ...e.props, tail: ` · Clawd ${[word, ...details].join(' · ')}` } })
+      return next({ ...e, props: { ...e.props, tail: ` · Clawd · ${[word, ...details].join(' · ')}` } })
     }
     if (e.surface !== 'desktop') return next(e)
     const STANDING: readonly Doing[] = ['idle', 'wait', 'read', 'love', 'cheer', 'oops', 'sleep']

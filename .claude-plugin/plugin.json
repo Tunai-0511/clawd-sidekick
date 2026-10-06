@@ -1,7 +1,7 @@
 {
   "name": "clawd-sidekick",
   "displayName": "Clawd Sidekick",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "description": "Clawd's pixel world above your prompt, in four scenes that follow your local time, season and holidays: Clawd walks to the zone of whatever Claude is doing while his crew plays, and acts out what happens: tests, commits, pushes, permission asks, a library that fills with the context. A Clawd spinner, a card of your day to share, live usage figures, the to-dos Claude hands you, and a deadline radar. English and 繁體中文.",
   "author": {
     "name": "Tunai"

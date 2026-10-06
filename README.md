@@ -57,7 +57,7 @@
 
 With reduced motion turned on in your system settings, the Desktop scene holds still: no loops, no drifting clouds or leaves.
 
-**A Clawd spinner.** The `Thinking…` line becomes a small Clawd who thinks in dots, then sits down at a laptop and types away while Claude works, beside a clock that counts every second. Between turns he stands by on the hint line under the prompt: waving when it's your turn, asleep late at night, with how long the last turn took and today's total.
+**A Clawd spinner.** The `Thinking…` line becomes a small Clawd who thinks in dots, then sits down at a laptop and types away while Claude works, beside a clock that counts every second. Between turns he stands by on the hint line under the prompt: waving when it's your turn, asleep late at night, with how long the last turn took and today's total. These two lines stay in English in either language, beside Claude Code's own words.
 
 **Clawd's day.** `/clawd recap` (or **Today** in the `/clawd` pane) shows a card of the day so far: how long Clawd worked alongside Claude, turns, tool calls, files edited, commands, tests passed, commits, pushes and tidy-ups, where the day went room by room, the week, and your streak of days in a row. It counts every session and project on the machine, and it's made to be screenshotted and shared.
 

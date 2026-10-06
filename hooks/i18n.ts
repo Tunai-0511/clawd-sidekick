@@ -9,7 +9,6 @@ export type RoomId = 'library' | 'codelab' | 'terminal' | 'web' | 'game'
 
 export type Theme = 'house' | 'beach' | 'space' | 'forest'
 
-export type SpinnerMode = 'requesting' | 'responding' | 'thinking' | 'tool-input' | 'tool-use'
 
 type SeasonWord = 'spring' | 'summer' | 'autumn' | 'winter'
 type HolidayWord = 'none' | 'lunarNewYear' | 'halloween' | 'christmas'
@@ -195,7 +194,6 @@ export type Strings = {
   outside: Record<'day' | 'dusk' | 'night', string>
   outsideSpace: string
   noTodos: string
-  modes: Record<SpinnerMode, string>
   // Seasons, holidays
   seasons: Record<SeasonWord, string>
   holidays: Record<HolidayWord, string>
@@ -401,7 +399,6 @@ const zh: Strings = {
   outside: { day: '窗外：白天', dusk: '窗外：黃昏', night: '窗外：晚上' },
   outsideSpace: '窗外：無邊的宇宙',
   noTodos: '沒有待辦',
-  modes: { requesting: '等回應', responding: '回覆中', thinking: '思考中', 'tool-input': '準備工具', 'tool-use': '用工具' },
   seasons: { spring: '春天', summer: '夏天', autumn: '秋天', winter: '冬天' },
   holidays: { none: '平常日', lunarNewYear: '農曆新年', halloween: '萬聖節', christmas: '聖誕節' },
   seasonSet: season => `季節固定成${season}。/clawd season auto 改回跟著日期。`,
@@ -608,7 +605,6 @@ const en: Strings = {
   outside: { day: 'Outside: daytime', dusk: 'Outside: dusk', night: 'Outside: night' },
   outsideSpace: 'Outside: the endless dark',
   noTodos: 'no to-dos',
-  modes: { requesting: 'requesting', responding: 'responding', thinking: 'thinking', 'tool-input': 'preparing a tool', 'tool-use': 'using tools' },
   seasons: { spring: 'spring', summer: 'summer', autumn: 'autumn', winter: 'winter' },
   holidays: { none: 'an ordinary day', lunarNewYear: 'Lunar New Year', halloween: 'Halloween', christmas: 'Christmas' },
   seasonSet: season => `The season is set to ${season}. /clawd season auto follows the date again.`,

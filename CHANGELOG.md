@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.2
+
+- The spinner's line and the standing-by line stay in English whatever Clawd speaks, since they sit beside Claude Code's own words (`Working…`, `? for shortcuts`).
+
 ## 0.10.1
 
 - Between turns, Clawd stands by on the hint line under the prompt: waving when it's your turn, standing by at the start, asleep late at night, with how long the last turn took and today's total. The desktop draws him beside the engine's own hint; the terminal keeps its line and adds a tail.
