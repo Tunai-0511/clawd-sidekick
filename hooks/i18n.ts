@@ -32,7 +32,6 @@ type Doings =
   | 'sleep'
   | 'pin'
   | 'panic'
-  | 'quiz'
   | 'love'
   | 'oops'
   | 'cheer'
@@ -321,7 +320,6 @@ const zh: Strings = {
     sleep: '睡著了',
     pin: '在貼便利貼',
     panic: '慌了！',
-    quiz: '有問題',
     love: '被摸得很開心',
     oops: '出錯了',
     cheer: '好開心',
@@ -500,7 +498,6 @@ const en: Strings = {
     sleep: 'asleep',
     pin: 'pinning a note',
     panic: 'panicking!',
-    quiz: 'has a question',
     love: 'loving the pets',
     oops: 'hit an error',
     cheer: 'happy',

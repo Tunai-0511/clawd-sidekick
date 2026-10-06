@@ -366,9 +366,6 @@ export function drawClawd(g: Grid, x: number, t: number, doing: Doing | 'walk', 
       armL = k % 2 === 0 ? 'up' : 'mid'
       armR = k % 2 === 0 ? 'mid' : 'up'
       break
-    case 'quiz':
-      armR = 'up'
-      break
     case 'love':
     case 'cheer':
       eyes = 'happy'
@@ -503,6 +500,22 @@ export function drawClawd(g: Grid, x: number, t: number, doing: Doing | 'walk', 
   }
 }
 
+/**
+ * A laptop on the desk in front of him: the lid toward us, its hinge, and
+ * the deck under it, wider than the lid. Clawd sits behind it, his arms
+ * taking turns at the keys either side, and a key clicks now and then. For
+ * the spinner's working Clawd, drawn over `drawClawd`.
+ */
+export function drawLaptop(g: Grid, x: number, t: number): void {
+  const y = FEET - 9
+  rect(g, x + 3, y + 5, 10, 3, C.gray)
+  rect(g, x + 4, y + 5, 8, 2, C.light)
+  rect(g, x + 3, y + 8, 10, 1, C.steel)
+  rect(g, x, y + 9, 16, 1, C.gray)
+  if (t % 4 === 1) px(g, x + 1, y + 8, C.white)
+  if (t % 4 === 3) px(g, x + 14, y + 8, C.white)
+}
+
 /** A deadline under three days away makes the main Clawd sweat. */
 export const isNervous = (s: SceneProps): boolean => s.urgency === 'near' || s.urgency === 'urgent'
 
@@ -550,12 +563,6 @@ function drawProps(g: Grid, x: number, y: number, k: number, doing: Doing | 'wal
         px(g, x - 1 - (k % 3), y + 1 + (k % 3), C.sweat)
         px(g, x - 1 - (k % 3), y + 2 + (k % 3), C.sweat)
       }
-      break
-    case 'quiz':
-      rect(g, x + 17, y - 6, 2, 1, C.yellow)
-      px(g, x + 19, y - 5, C.yellow)
-      px(g, x + 18, y - 4, C.yellow)
-      px(g, x + 18, y - 2, C.yellow)
       break
     case 'love':
       for (const [dx, phase] of [[15, 0], [-3, 6]] as const) {

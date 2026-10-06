@@ -52,8 +52,6 @@ export const POSES: readonly Pose[] = [
   'sleep',
   'itemget',
   'love',
-  'conduct',
-  'quiz',
   'ask',
   'stamp',
   'mail',
@@ -77,8 +75,6 @@ export const CYCLE: Record<Pose, number> = {
   sleep: 32,
   itemget: 8,
   love: 12,
-  conduct: 8,
-  quiz: 16,
   ask: 8,
   stamp: 8,
   mail: 16,
@@ -154,10 +150,7 @@ function stamp(g: Grid, x: number, y: number, art: readonly string[]): void {
 
 const HEART = ['.r.r.', 'rprrr', '.rrr.', '..r..']
 const HEART_SMALL = ['p.p', 'ppp', '.p.']
-const NOTE = ['.u..', '.uu.', '.u.u', 'uu..', 'uu..']
-const NOTES = ['.uuuu', '.u..u', '.u..u', 'uu.uu', 'uu.uu']
 const BANG = ['rr', 'rr', 'rr', '..', 'rr']
-const QUESTION = ['.yy.', 'y..y', '...y', '..y.', '....', '..y.']
 const SIGN = ['wwwwwww', 'wwrrrww', 'wrwwwrw', 'wwwwrww', 'wwwrwww', 'wwwwwww', 'wwwrwww', 'lllllll']
 const PLANE = ['wwwwwww', 'wgwwwgw', 'wwgwgww', 'wwwrwww']
 const BOOKS = ['rrrrrr.', '.BBBBBB', 'GGGGGG.', '.yyyyy.']
@@ -441,26 +434,6 @@ export function frame(pose: Pose, t: number, options: FrameOptions = {}): Grid {
       if (right >= -3) stamp(g, 32, right, HEART)
       const left = climb(6)
       if (left >= -2) stamp(g, 5, left + 2, HEART_SMALL)
-      break
-    }
-    case 'conduct': {
-      const isUpBeat = k % 4 < 2
-      clawd(g, base({ eyes: isUpBeat ? 'happy' : 'closed', armR: isUpBeat ? 'up' : 'out', isSquashed: !isUpBeat, mouth: k % 2 === 0 ? 'o' : 'none' }))
-      if (isUpBeat) {
-        px(g, 32, 2, 13)
-        px(g, 33, 1, 13)
-        px(g, 34, 0, 4)
-      } else {
-        px(g, 33, 6, 13)
-        px(g, 34, 5, 13)
-        px(g, 35, 4, 4)
-      }
-      stamp(g, 3, Math.max(0, 9 - k), k < 4 ? NOTE : NOTES)
-      break
-    }
-    case 'quiz': {
-      clawd(g, base({ eyes: k === 9 ? 'blink' : 'open', look: look ?? 0, armR: 'up' }))
-      stamp(g, 34, k % 8 < 4 ? 0 : 1, QUESTION)
       break
     }
     case 'ask': {

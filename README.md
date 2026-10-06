@@ -57,7 +57,7 @@
 
 With reduced motion turned on in your system settings, the Desktop scene holds still: no loops, no drifting clouds or leaves.
 
-**A Clawd spinner.** The `Thinking…` line becomes a small Clawd who thinks in dots or taps his feet while a tool runs, beside a clock that counts every second.
+**A Clawd spinner.** The `Thinking…` line becomes a small Clawd who thinks in dots, then sits down at a laptop and types away while Claude works, beside a clock that counts every second.
 
 **Live figures** under the house: model, context fill, 5-hour and 7-day plan usage, session cost, the turn timer, and this turn's tool calls, edits and commands. Each turns yellow past 50% and red past 80%.
 

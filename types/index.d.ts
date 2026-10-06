@@ -14,8 +14,6 @@ export type Pose =
   | 'sleep'
   | 'itemget'
   | 'love'
-  | 'conduct'
-  | 'quiz'
   /** A tool waits for the person's permission. */
   | 'ask'
   /** A commit went in. */
@@ -64,7 +62,6 @@ export type Doing =
   | 'sleep'
   | 'pin'
   | 'panic'
-  | 'quiz'
   | 'love'
   | 'oops'
   | 'cheer'

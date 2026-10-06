@@ -20,6 +20,7 @@ import {
   drawBackground,
   gameRoom,
   drawClawd,
+  drawLaptop,
   isNervous,
   outfitOf,
   playOf,
@@ -314,13 +315,21 @@ export function sceneSvg(s: SceneProps, now: number): string {
   )
 }
 
-/** One small Clawd on his own, for the spinner and the folded band: transparent, filling its box. */
-export function miniClawdSvg(doing: Doing): string {
+/**
+ * One small Clawd on his own, for the spinner and the folded band:
+ * transparent, filling its box. `isOnLaptop` has him typing away on a laptop.
+ */
+export function miniClawdSvg(doing: Doing, isOnLaptop = false): string {
   const box: Box = { x: REF - 3, y: 9, w: 24, h: 16 }
   const frames: Grid[] = []
   for (let t = 0; t < LOOP; t++) {
     const g = blank()
-    drawClawd(g, REF, t, doing, null)
+    if (isOnLaptop) {
+      drawClawd(g, REF, t, 'type', null, 0, { look: 0, eyes: t % 24 === 11 ? 'blink' : 'open' })
+      drawLaptop(g, REF, t)
+    } else {
+      drawClawd(g, REF, t, doing, null)
+    }
     frames.push(g)
   }
   return (

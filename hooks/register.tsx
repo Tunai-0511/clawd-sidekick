@@ -83,8 +83,6 @@ const PLACE: Record<Pose, { spot: Spot | null; doing: Doing }> = {
   sleep: { spot: 'library', doing: 'sleep' },
   itemget: { spot: 'board', doing: 'pin' },
   love: { spot: null, doing: 'love' },
-  conduct: { spot: 'code', doing: 'think' },
-  quiz: { spot: null, doing: 'quiz' },
   ask: { spot: null, doing: 'ask' },
   stamp: { spot: null, doing: 'stamp' },
   mail: { spot: null, doing: 'mail' },
@@ -669,7 +667,7 @@ export const register: Register = (on, options) => {
       const { Box, Svg, Client } = $.ui.resolve(e)
       return (
         <Box flexDirection="row" gap={1} alignItems="center">
-          <Svg source={miniClawdSvg(doing)} alt="Clawd" width={30} height={20} />
+          <Svg source={miniClawdSvg(doing, doing !== 'think')} alt="Clawd" width={30} height={20} />
           <Client key="spinner" module="./spinner-client.tsx" props={props} />
         </Box>
       )
