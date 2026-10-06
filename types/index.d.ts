@@ -16,6 +16,14 @@ export type Pose =
   | 'love'
   | 'conduct'
   | 'quiz'
+  /** A tool waits for the person's permission. */
+  | 'ask'
+  /** A commit went in. */
+  | 'stamp'
+  /** A push went out. */
+  | 'mail'
+  /** The conversation is being compacted. */
+  | 'tidy'
 
 /** Something only the person can do, kept across sessions and projects. */
 export type Todo = {
@@ -65,6 +73,10 @@ export type Doing =
   | 'jump'
   | 'tower'
   | 'clap'
+  | 'ask'
+  | 'stamp'
+  | 'mail'
+  | 'tidy'
 
 /** What the crew plays in the game room. */
 export type Game = 'pong' | 'volley' | 'rope' | 'tower' | 'sleep'
@@ -112,6 +124,10 @@ export type SceneProps = {
   /** The language the house's signs and tips speak. */
   lang: 'zh' | 'en'
   theme: Theme
+  /** How full Claude's context is, in tenths (0–10): the library's books; null before it is known. */
+  memory: number | null
+  /** The five-hour window is past 80%: the Clawds are getting tired. */
+  isTired: boolean
   season: Season
   holiday: Holiday
 }

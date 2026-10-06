@@ -36,6 +36,10 @@ type Doings =
   | 'love'
   | 'oops'
   | 'cheer'
+  | 'ask'
+  | 'stamp'
+  | 'mail'
+  | 'tidy'
 
 export type Strings = {
   // What Clawd is doing, from a tool call
@@ -56,6 +60,17 @@ export type Strings = {
   turnError: string
   approve: string
   failed: (what: string) => string
+  // What happened, acted out
+  testsPassed: string
+  testsFailed: string
+  committed: (sha: string) => string
+  pushed: (branch: string) => string
+  prOpened: (n: number) => string
+  prMerged: (n: number) => string
+  compacting: string
+  compacted: string
+  /** The library zone's hover: Claude's memory, `level` tenths full or not known yet. */
+  memoryTip: (theme: Theme, level: number | null) => string
   sleepy: string
   petLines: (count: number) => string[]
   done: (todo: string) => string
@@ -185,6 +200,20 @@ const zh: Strings = {
   turnError: '這回合出錯了',
   approve: '需要你批准',
   failed: what => `${what} 出錯了`,
+  testsPassed: '測試通過！',
+  testsFailed: '測試沒過…',
+  committed: sha => `commit 好了 ${sha}`,
+  pushed: branch => `推上 ${branch} 了`,
+  prOpened: n => `開了 PR #${n}`,
+  prMerged: n => `PR #${n} 合併了！`,
+  compacting: '整理記憶中…',
+  compacted: '記憶整理好了',
+  memoryTip: (theme, level) => {
+    const what = { house: '書架', beach: '書堆', space: '資料水晶', forest: '書堆' }[theme]
+    return level === null
+      ? `${what}＝Claude 的記憶（context），還不知道用了多少`
+      : `${what}＝Claude 的記憶（context），大約 ${level * 10}% 滿；快滿時 Clawd 會整理一次`
+  },
   sleepy: 'zzz…',
   petLines: count => ['嘿嘿～', '好癢！', '再摸一下', '♥', `被摸了 ${count} 次`],
   done: todo => `完成：${todo}`,
@@ -296,6 +325,10 @@ const zh: Strings = {
     love: '被摸得很開心',
     oops: '出錯了',
     cheer: '好開心',
+    ask: '舉牌等你批准',
+    stamp: '在 commit 上蓋章',
+    mail: '把 push 寄出去',
+    tidy: '在整理記憶',
   },
   caps: { blue: '藍帽', green: '綠帽', purple: '紫帽' },
   mainClawd: '主 Clawd',
@@ -346,6 +379,20 @@ const en: Strings = {
   turnError: 'That turn hit an error',
   approve: 'Needs your OK',
   failed: what => `${what} failed`,
+  testsPassed: 'Tests pass!',
+  testsFailed: 'Tests failed…',
+  committed: sha => `Committed ${sha}`,
+  pushed: branch => `Pushed to ${branch}`,
+  prOpened: n => `Opened PR #${n}`,
+  prMerged: n => `PR #${n} merged!`,
+  compacting: 'Tidying the memory…',
+  compacted: 'Memory tidied',
+  memoryTip: (theme, level) => {
+    const what = { house: 'The shelves', beach: 'The book pile', space: 'The data crystals', forest: 'The book pile' }[theme]
+    return level === null
+      ? `${what} = Claude's memory (context), not measured yet`
+      : `${what} = Claude's memory (context), about ${level * 10}% full; when it fills up, Clawd tidies it`
+  },
   sleepy: 'zzz…',
   petLines: count => ['Hehe~', 'That tickles!', 'Again!', '♥', `Petted ${count} times`],
   done: todo => `Done: ${todo}`,
@@ -457,6 +504,10 @@ const en: Strings = {
     love: 'loving the pets',
     oops: 'hit an error',
     cheer: 'happy',
+    ask: 'holding up a sign for your OK',
+    stamp: 'stamping a commit',
+    mail: 'sending a push off',
+    tidy: 'tidying the memory',
   },
   caps: { blue: 'Blue-cap', green: 'Green-cap', purple: 'Purple-cap' },
   mainClawd: 'Clawd',

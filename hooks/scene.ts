@@ -12,7 +12,7 @@ import type { Doing, Game, SceneActor, SceneProps, Theme, TimeOfDay } from '../t
 import { say, type Lang, type RoomId } from './i18n'
 import { blank, C, FEET, FLOOR, px, rect, type Box, type Grid } from './pixels'
 import { decorate, drawFalling } from './decor'
-import { THEMES } from './themes'
+import { drawScene, THEMES } from './themes'
 
 export type { Doing, Game, SceneActor, SceneProps, Theme, TimeOfDay }
 export { blank, SCENE_PALETTE, SH, STEP, SW, type Box, type Grid } from './pixels'
@@ -264,7 +264,7 @@ export type BackgroundOptions = {
 /** Everything but the Clawds at tick `t`: the scene, then the game being played. */
 export function drawBackground(g: Grid, t: number, s: SceneProps, play: Play, options: BackgroundOptions = {}): void {
   const { hasClouds = true, isPlain = false } = options
-  THEMES[s.theme].draw(g, t, s, { hasClouds, isPlain })
+  drawScene(g, t, s, { hasClouds, isPlain })
   decorate(g, t, s)
   gameRoom(g, t, play)
 }
@@ -290,7 +290,7 @@ type Eyes = 'open' | 'blink' | 'happy' | 'closed' | 'up' | 'down' | 'wide'
 type Arm = 'mid' | 'up' | 'low'
 
 /** What a game asks of a player on top of his own pose: where to look, his arms, a jump. */
-export type Mod = { look?: number; armL?: Arm; armR?: Arm; lift?: number; eyes?: Eyes; isSweating?: boolean; hasScarf?: boolean; hat?: 'santa' | 'witch' }
+export type Mod = { look?: number; armL?: Arm; armR?: Arm; lift?: number; eyes?: Eyes; isSweating?: boolean; hasScarf?: boolean; hat?: 'santa' | 'witch'; isTired?: boolean }
 
 /** A Clawd at the CLI banner's own size: 16 × 10, feet on the floor at FEET. */
 export function drawClawd(g: Grid, x: number, t: number, doing: Doing | 'walk', cap: string | null, phase = 0, mod: Mod = {}): void {
@@ -381,6 +381,28 @@ export function drawClawd(g: Grid, x: number, t: number, doing: Doing | 'walk', 
       armL = 'low'
       armR = 'low'
       break
+    case 'ask':
+      // Holds a sign up to the glass and taps it.
+      eyes = 'wide'
+      armL = 'up'
+      armR = 'up'
+      if (k % 8 < 2) y -= 1
+      break
+    case 'stamp':
+      eyes = 'happy'
+      armR = k % 8 < 4 ? 'up' : 'low'
+      break
+    case 'mail':
+      eyes = 'happy'
+      armR = k % 16 < 3 ? 'up' : 'mid'
+      look = 1
+      break
+    case 'tidy':
+      eyes = 'happy'
+      armL = 'up'
+      armR = 'up'
+      if (k % 12 < 2) y -= 1
+      break
     case 'idle':
       if (k % 48 >= 28 && k % 48 < 34) look = -1
       if (k % 48 >= 36 && k % 48 < 42) look = 1
@@ -390,6 +412,8 @@ export function drawClawd(g: Grid, x: number, t: number, doing: Doing | 'walk', 
   if (mod.armL !== undefined) armL = mod.armL
   if (mod.armR !== undefined) armR = mod.armR
   if (mod.eyes !== undefined) eyes = mod.eyes
+  // Tired: heavy eyelids, the eyes open now and then.
+  if (mod.isTired && (eyes === 'open' || eyes === 'up' || eyes === 'down') && k % 16 < 11) eyes = 'blink'
   const lift = mod.lift ?? 0
   y -= lift
   const bx = x + shake
@@ -466,6 +490,12 @@ export function drawClawd(g: Grid, x: number, t: number, doing: Doing | 'walk', 
     px(g, bx + 8, y - 5, C.witch)
   }
   drawProps(g, bx, y, k, doing)
+  if (mod.isTired && doing !== 'sleep' && k % 48 >= 30 && k % 48 < 42) {
+    const rise = Math.floor((k % 48 - 30) / 4)
+    rect(g, bx + 15, y - 1 - rise, 2, 1, C.light)
+    px(g, bx + 16, y - rise, C.light)
+    rect(g, bx + 15, y + 1 - rise, 2, 1, C.light)
+  }
   if (mod.isSweating && k % 24 < 9) {
     const drop = Math.floor((k % 24) / 3)
     px(g, bx + 15, y + 1 + drop, C.sweat)
@@ -476,10 +506,10 @@ export function drawClawd(g: Grid, x: number, t: number, doing: Doing | 'walk', 
 /** A deadline under three days away makes the main Clawd sweat. */
 export const isNervous = (s: SceneProps): boolean => s.urgency === 'near' || s.urgency === 'urgent'
 
-/** What the date has the Clawds wear: scarves in winter, a hat for the main Clawd on holidays. */
+/** What the date and the hour have the Clawds wear: scarves in winter, a hat for the main Clawd on holidays, tired eyes late in the five-hour window. */
 export function outfitOf(a: SceneActor, s: SceneProps): Mod {
   const hat = a.cap !== null ? undefined : s.holiday === 'christmas' ? 'santa' : s.holiday === 'halloween' ? 'witch' : undefined
-  return { hasScarf: s.season === 'winter', ...(hat === undefined ? {} : { hat }) }
+  return { hasScarf: s.season === 'winter', isTired: s.isTired, ...(hat === undefined ? {} : { hat }) }
 }
 
 function drawProps(g: Grid, x: number, y: number, k: number, doing: Doing | 'walk'): void {
@@ -553,6 +583,56 @@ function drawProps(g: Grid, x: number, y: number, k: number, doing: Doing | 'wal
         px(g, x + 15, y + 1 + Math.floor((k % 12) / 3), C.sweat)
       }
       break
+    case 'ask': {
+      // A sign with a big "?", held up over his head.
+      const top = y - 8 - (k % 8 < 2 ? 1 : 0)
+      rect(g, x + 2, top, 12, 6, C.white)
+      rect(g, x + 2, top + 6, 12, 1, C.light)
+      rect(g, x + 7, top + 1, 2, 1, C.red)
+      px(g, x + 9, top + 2, C.red)
+      px(g, x + 8, top + 3, C.red)
+      px(g, x + 8, top + 5, C.red)
+      if (k % 8 < 2) {
+        px(g, x - 2, top + 1, C.yellow)
+        px(g, x + 17, top + 1, C.yellow)
+      }
+      break
+    }
+    case 'stamp': {
+      // A form on the desk; the stamp comes down and leaves a red seal.
+      rect(g, x + 16, y + 7, 7, 1, C.white)
+      rect(g, x + 16, y + 6, 7, 1, C.light)
+      const isDown = k % 8 >= 4
+      const sy = isDown ? y + 3 : y - 1
+      rect(g, x + 18, sy, 3, 1, C.wood)
+      rect(g, x + 19, sy + 1, 1, 1, C.wood)
+      rect(g, x + 17, sy + 2, 5, 1, C.red)
+      if (isDown || k % 16 >= 8) rect(g, x + 18, y + 6, 3, 1, C.red)
+      break
+    }
+    case 'mail': {
+      // A sealed envelope off his hand, up and away.
+      const p = k % 16
+      if (p >= 2 && p < 14) {
+        const ex = x + 15 + Math.floor((p - 2) * 0.55)
+        const ey = y + 1 - Math.floor((p - 2) / 2)
+        rect(g, ex, ey, 5, 3, C.white)
+        px(g, ex + 1, ey, C.gray)
+        px(g, ex + 2, ey + 1, C.gray)
+        px(g, ex + 3, ey, C.gray)
+        px(g, ex + 2, ey + 2, C.red)
+      }
+      break
+    }
+    case 'tidy': {
+      // An armful of books, held high on the way back to the shelf.
+      const top = y - 4 - (k % 12 < 2 ? 1 : 0)
+      rect(g, x + 3, top, 10, 1, C.red)
+      rect(g, x + 4, top + 1, 9, 1, C.blue)
+      rect(g, x + 3, top + 2, 10, 1, C.green)
+      rect(g, x + 4, top + 3, 8, 1, C.yellow)
+      break
+    }
     case 'pong':
     case 'arcade':
     case 'code':
@@ -651,7 +731,7 @@ export const CALENDAR: Box = { x: 66, y: 4, w: 9, h: 8 }
 
 const inside = (b: Box, x: number, y: number): boolean => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h
 
-export type Hit = { kind: 'actor'; id: string } | { kind: 'board' } | { kind: 'calendar' } | { kind: 'room'; id: string }
+export type Hit = { kind: 'actor'; id: string } | { kind: 'board' } | { kind: 'calendar' } | { kind: 'memory' } | { kind: 'room'; id: string }
 
 /** What is under scene pixel (x, y): a Clawd first (the main one on top), then the wall's things, then the room. */
 export function hitTest(s: SceneProps, now: number, x: number, y: number): Hit | undefined {
@@ -663,6 +743,7 @@ export function hitTest(s: SceneProps, now: number, x: number, y: number): Hit |
   if (actor !== undefined) return { kind: 'actor', id: actor.id }
   if (inside(BOARD, x, y)) return { kind: 'board' }
   if (inside(CALENDAR, x, y)) return { kind: 'calendar' }
+  if (inside(THEMES[s.theme].memory.box, x, y)) return { kind: 'memory' }
   const room = ROOMS.find(r => x >= r.x && x < r.x + r.w && y >= 3 && y < FLOOR)
   return room === undefined ? undefined : { kind: 'room', id: room.id }
 }
@@ -679,6 +760,8 @@ export function tipOf(s: SceneProps, hit: Hit): string {
       return s.board.length === 0 ? words.boardEmpty : words.board(s.board)
     case 'calendar':
       return s.deadline === '' ? words.calendarEmpty : words.calendar(s.deadline)
+    case 'memory':
+      return words.memoryTip(s.theme, s.memory)
     case 'room': {
       const id = hit.id as RoomId
       return words.roomTip(words.rooms[s.theme][id], words.roomPurpose[id])

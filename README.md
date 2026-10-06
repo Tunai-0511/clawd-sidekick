@@ -36,6 +36,16 @@
 
 ![The game room: ping-pong and arcade, jump rope at dusk, a block tower, everyone asleep at night](./docs/game-room.png)
 
+**The scene shows what's really happening.** You can read the session from the scene alone, in every scene:
+
+- **Claude's memory is the library.** As the context fills, books fill the house's shelves (and pile up on the floor), the station's data crystals light up one by one, and the book pile grows on the beach and at the camp. When the conversation is compacted, Clawd carries an armful of books off and the shelves empty out.
+- **Test runs**: when `npm test`, `pytest`, `go test`, `cargo test` or the like passes, Clawd cheers; when it fails, he sweats.
+- **Git**: a commit gets a red stamp, and a push or a new pull request goes off as a sealed envelope. A merged pull request gets a cheer. Claude Code tells the mod what git and gh did, so nothing is guessed from the output.
+- **Waiting for your permission**: Clawd holds a big "?" sign up to the glass.
+- **Late in the five-hour window** (past 80%), every Clawd gets heavy eyelids and yawns now and then.
+
+![The moments in four scenes: Clawd holds up a "?" sign for your OK in the house, stamps a commit at the camp, sends a push off as an envelope on the beach, and carries the station's data off while compacting; the shelves and crystals show how full the context is](./docs/moments-en.png)
+
 **Seasons and holidays.** The scenes follow the calendar wherever you are, with no network:
 
 - **Seasons**, from your local date: blossoms and drifting petals in spring, a red-and-gold forest and falling leaves in autumn, scarves on every Clawd in winter. South of the equator the seasons turn over: your system time zone (`Australia/Sydney`, `America/Sao_Paulo`) tells Clawd which side you're on.
@@ -116,7 +126,7 @@ A mod runs with your permissions, so here is everything this one reaches (`claud
 - `hooks/themes.ts` draws the four scenes procedurally on a 256 × 28 canvas (`hooks/pixels.ts`). `hooks/scene.ts` adds the Clawds, the crew's places in each game, and what the pointer finds.
 - **Desktop app**: `hooks/scene-svg.ts` turns it into one interactive SVG in three layers. The still scene is drawn once. Each of the scene's moving parts loops as a SMIL flipbook of only the pixels that change, and the game being played is a layer of its own, so their periods never multiply. Walking is `animateTransform`, and hovering is CSS `:hover` and `<title>`. `color-scheme: light dark` on the root keeps the frame transparent on any theme. When the system asks for reduced motion, every loop holds its first frame and nothing drifts.
 - **Terminal**: `hooks/scene-client.tsx` is a `Client` surface module with its own frame clock. It draws two pixels per cell with `▀`, and its camera follows Clawd across a crop of up to 150 columns.
-- `hooks/decor.ts` adds the holidays and the falling petals and leaves; `hooks/seasons.ts` works out the season and the holiday.
+- `hooks/decor.ts` adds the holidays and the falling petals and leaves; `hooks/seasons.ts` works out the season and the holiday; `hooks/events.ts` turns a finished command into a moment (a test run, a commit, a push, a pull request).
 - `hooks/i18n.ts` holds every string in both languages.
 
 ## Develop
@@ -128,6 +138,10 @@ claude plugin test .
 ```
 
 Type declarations for your Claude Code build appear in `.claude-plugin/types/` the first time the folder loads. After that, `npx -p typescript tsc -p .` type-checks the mod.
+
+### Adding a scene
+
+A scene is one entry in `THEMES` (`hooks/themes.ts`), and its type, `ThemeArt`, makes every part required: the drawing, its moving parts, the light and the toy that answer the pointer, the sky, the signs, and `memory`, the thing in the library zone that shows how full the context is. Leave one out and the mod doesn't type-check. Then the tests in *what happens shows in every scene* run your scene through every memory level and every moment (asking, stamping, sending, tidying, cheering, sweating), and fail if any of them doesn't show or the SVG outgrows its limit.
 
 ## Credits
 

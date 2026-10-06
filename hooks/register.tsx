@@ -18,6 +18,7 @@ import { miniClawdSvg, sceneSvg } from './scene-svg'
 import { H, W } from './sprite'
 import { THEME_ORDER } from './themes'
 import { clawdSvg } from './svg'
+import { momentOf, type GitOperation } from './events'
 import { holidayOf, seasonOf, zoneOf } from './seasons'
 import { extractPrompt, isDuplicate, newId, ordered, parseList, shouldExtract } from './todo'
 
@@ -84,6 +85,10 @@ const PLACE: Record<Pose, { spot: Spot | null; doing: Doing }> = {
   love: { spot: null, doing: 'love' },
   conduct: { spot: 'code', doing: 'think' },
   quiz: { spot: null, doing: 'quiz' },
+  ask: { spot: null, doing: 'ask' },
+  stamp: { spot: null, doing: 'stamp' },
+  mail: { spot: null, doing: 'mail' },
+  tidy: { spot: 'library', doing: 'tidy' },
 }
 
 const str = (value: unknown): string => (typeof value === 'string' ? value : '')
@@ -564,6 +569,8 @@ export const register: Register = (on, options) => {
       deadline: nearest === undefined ? '' : `${nearest.title} · ${formatDue(nearest.due, offset)} · ${countdown(nearest.due, now, talk, true)}`,
       lang: talk,
       theme,
+      memory: usage.contextPercent === null ? null : Math.min(10, Math.floor(usage.contextPercent / 10)),
+      isTired: (usage.fiveHour ?? 0) >= 80,
       season: seasonPick !== 'auto' ? seasonPick : seasonOf(now, offset, zone),
       holiday: holidayPick !== 'auto' ? holidayPick : holidayOf(now, offset),
     }
@@ -940,7 +947,10 @@ export const register: Register = (on, options) => {
       if (isDispatch) await releaseCrew($, e.tool_use_id)
       if (agentId === undefined) {
         if (!isFailed && ran.deny === undefined && EDIT_TOOLS.has(tool)) await count($, 'edits')
-        if (isFailed) await flash($, 'oops', say(lang).failed(seen.label), 2500, () => settle($))
+        const git = !isFailed && ran.deny === undefined ? (ran.result as { gitOperation?: GitOperation } | undefined)?.gitOperation : undefined
+        const moment = tool === 'Bash' && ran.deny === undefined ? momentOf(str(input.command), isFailed, git, lang) : undefined
+        if (moment !== undefined) await flash($, moment.pose, moment.label, moment.ms, () => settle($))
+        else if (isFailed) await flash($, 'oops', say(lang).failed(seen.label), 2500, () => settle($))
         else if (isWorking && seen.pose !== 'wait') await act($, 'think', say(lang).thinking)
       }
       await refreshUsage($)
@@ -953,12 +963,30 @@ export const register: Register = (on, options) => {
   on('classic.Notification', async ($, e, next) => {
     if (/permission/i.test(String(e.notification_type))) {
       try {
-        await act($, 'wait', say(lang).approve)
+        await act($, 'ask', say(lang).approve)
       } catch {
         // A missed wave is no reason to drop the notification.
       }
     }
     return next(e)
+  }).catch(($, e, next) => next(e))
+
+  // Compacting, Clawd carries the library's books off and back; the shelves then show the room it made.
+  on('session.compact', async ($, e, next) => {
+    if (e.agentId !== undefined || e.trigger === 'precompute') return next(e)
+    try {
+      await act($, 'tidy', say(lang).compacting)
+    } catch {
+      // Compaction goes ahead whatever Clawd is doing.
+    }
+    const compacted = await next(e)
+    try {
+      await refreshUsage($, true)
+      await flash($, 'cheer', say(lang).compacted, 3000, () => settle($))
+    } catch {
+      // As above.
+    }
+    return compacted
   }).catch(($, e, next) => next(e))
 
   on('turn.complete', async ($, e, next) => {

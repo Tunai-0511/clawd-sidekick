@@ -1,11 +1,13 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import type { Game, SceneActor, SceneProps, Season, Theme, TimeOfDay } from '../types'
+import type { Doing, Game, SceneActor, SceneProps, Season, Theme, TimeOfDay } from '../types'
 import { countdown, parseDeadline, urgency } from '../hooks/deadline'
-import { hitTest, layoutFor, SPOT_X, tipOf } from '../hooks/scene'
+import { isTestRun, momentOf } from '../hooks/events'
+import { composeScene, hitTest, layoutFor, SPOT_X, tipOf } from '../hooks/scene'
 import { sceneSvg } from '../hooks/scene-svg'
 import { holidayOf, isSouthern, seasonOf, zoneOf } from '../hooks/seasons'
 import { CYCLE, frame, H, POSES, W } from '../hooks/sprite'
+import { THEME_ORDER, THEMES } from '../hooks/themes'
 import { isDuplicate, parseList, shouldExtract } from '../hooks/todo'
 import { BAND, NOW, SURFACES, world } from './world'
 
@@ -34,6 +36,8 @@ const sceneOf = (game: Game, time: TimeOfDay = 'day', lang: 'zh' | 'en' = 'zh', 
   deadline: 'Launch · 12/24 23:59 · 剩 5 天',
   lang,
   theme,
+  memory: 5,
+  isTired: false,
   season,
   holiday: 'none',
 })
@@ -164,6 +168,66 @@ describe('the season and the holidays', () => {
   })
 })
 
+describe('what happens shows in every scene', () => {
+  const differing = (a: Uint8Array, b: Uint8Array, box: { x: number; y: number; w: number; h: number }): number => {
+    let n = 0
+    for (let y = box.y; y < box.y + box.h; y++) for (let x = box.x; x < box.x + box.w; x++) if (a[y * 256 + x] !== b[y * 256 + x]) n++
+    return n
+  }
+
+  /** The scene with the main Clawd standing at `x` doing `doing`, out of the way unless told. */
+  const withMain = (theme: Theme, doing: Doing, x: number = SPOT_X.code): SceneProps => {
+    const s = sceneOf('volley', 'day', 'zh', theme)
+    return { ...s, actors: s.actors.map(a => (a.cap === null ? { ...a, fromX: x, toX: x, departAt: 0, doing, label: '好' } : a)) }
+  }
+
+  test("every scene keeps Claude's memory in its library zone, and fills it as the context fills", async () => {
+    for (const theme of THEME_ORDER) {
+      const { box } = THEMES[theme].memory
+      expect(box.x + box.w).toBeLessThanOrEqual(46)
+      const scene = (memory: number): Uint8Array => composeScene({ ...withMain(theme, 'code'), memory }, 0, NOW)
+      expect(differing(scene(0), scene(10), box)).toBeGreaterThan(8)
+      expect(differing(scene(4), scene(5), box)).toBeGreaterThan(0)
+      expect(sceneSvg({ ...sceneOf('pong', 'day', 'zh', theme), memory: 6 }, NOW)).toContain('記憶（context），大約 60% 滿')
+      expect(tipOf({ ...sceneOf('pong', 'day', 'en', theme), memory: 3 }, { kind: 'memory' })).toContain('about 30% full')
+      expect(hitTest(withMain(theme, 'code'), NOW, box.x + 1, box.y + box.h - 1)).toEqual({ kind: 'memory' })
+    }
+  })
+
+  test('every moment is acted out the same in every scene, inside the size limit', async () => {
+    const moments: Doing[] = ['ask', 'stamp', 'mail', 'tidy', 'cheer', 'oops']
+    for (const theme of THEME_ORDER) {
+      const around = { x: SPOT_X.code - 4, y: 0, w: 32, h: 28 }
+      for (const doing of moments) {
+        const frames = [0, 3, 5, 9].map(t => composeScene(withMain(theme, doing), t, NOW))
+        const plain = [0, 3, 5, 9].map(t => composeScene(withMain(theme, 'think'), t, NOW))
+        expect(frames.some((g, i) => differing(g, plain[i]!, around) > 6)).toBe(true)
+        expect(sceneSvg(withMain(theme, doing), NOW).length).toBeLessThan(131072)
+      }
+    }
+  })
+
+  test('a tired crew droops late in the five-hour window, in every scene', async () => {
+    for (const theme of THEME_ORDER) {
+      const rested = composeScene(sceneOf('pong', 'day', 'zh', theme), 2, NOW)
+      const tired = composeScene({ ...sceneOf('pong', 'day', 'zh', theme), isTired: true }, 2, NOW)
+      expect(differing(rested, tired, { x: 174, y: 0, w: 82, h: 28 })).toBeGreaterThan(0)
+    }
+  })
+
+  test('commands become moments: test runs, commits, pushes, pull requests', async () => {
+    expect(['npm test', 'pnpm run test -- --watch=false', 'cd api && pytest -q', 'go test ./...', 'cargo test', './gradlew test', 'claude plugin test .'].every(isTestRun)).toBe(true)
+    expect(['npm install', 'git status', 'cat test.txt', 'ls tests'].some(isTestRun)).toBe(false)
+    expect(momentOf('npm test', false, undefined, 'zh')).toMatchObject({ pose: 'cheer', label: '測試通過！' })
+    expect(momentOf('pytest', true, undefined, 'en')).toMatchObject({ pose: 'oops', label: 'Tests failed…' })
+    expect(momentOf('git commit -m x', false, { commit: { sha: 'abc1234def' } }, 'zh')).toMatchObject({ pose: 'stamp', label: 'commit 好了 abc1234' })
+    expect(momentOf('git commit -m x && git push', false, { commit: { sha: 'abc1234' }, push: { branch: 'main' } }, 'en')).toMatchObject({ pose: 'mail', label: 'Pushed to main' })
+    expect(momentOf('gh pr merge 12', false, { pr: { number: 12, action: 'merged' } }, 'zh')).toMatchObject({ pose: 'cheer', label: 'PR #12 合併了！' })
+    expect(momentOf('git push', true, { push: { branch: 'main' } }, 'zh')).toBeUndefined()
+    expect(momentOf('ls', false, undefined, 'zh')).toBeUndefined()
+  })
+})
+
 describe('the band above the prompt', () => {
   test('reduced motion holds every loop on its first frame, and a holiday hat clears the bubble', async () => {
     const svg = sceneSvg({ ...sceneOf('volley', 'night', 'zh', 'house', 'winter'), holiday: 'christmas' }, NOW)
@@ -218,6 +282,38 @@ describe('the band above the prompt', () => {
       await w.clock.advance(5_000)
       expect(await source()).toBe(first)
     }
+  })
+
+  test('a commit, then a permission ask, play out on the band', async ($, on) => {
+    world(on)
+    on('classic.Notification', async () => ({}))
+    on('tool.call', async () => ({ result: { stdout: '', stderr: '', interrupted: false, gitOperation: { commit: { sha: 'abc1234def', kind: 'committed' } } } as never }))
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    await $.turn.start({ text: 'commit 一下', turnId: 't9' })
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m "fix"' } as never)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toContain('commit 好了 abc1234')
+    await $.classic.Notification({ message: 'Claude needs your permission', notification_type: 'permission_prompt' })
+    const asking = String((await ui.find({ type: 'Svg' }))?.props.source)
+    expect(asking).toContain('主 Clawd · 需要你批准')
+    expect(asking).not.toContain('>需要你批准</text>')
+  })
+
+  test('compacting, Clawd tidies the library, then says it is done', async ($, on) => {
+    world(on)
+    let during = ''
+    on('session.compact', async () => {
+      const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+      during = String((await ui.find({ type: 'Svg' }))?.props.source)
+      await ui.unmount()
+      return { messages: [{ role: 'user', text: '摘要', toolUses: [] }] } as never
+    })
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    const summary = [{ role: 'user', text: '摘要', toolUses: [] }] as never
+    await $.session.compact({ trigger: 'manual', messages: summary })
+    expect(during).toContain('整理記憶中…')
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toContain('記憶整理好了')
   })
 
   test('the crew plays volleyball while Claude works', async ($, on) => {

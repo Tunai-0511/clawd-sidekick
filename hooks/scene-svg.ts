@@ -9,7 +9,7 @@
 
 import { decorate, decorParts, fallingSvg } from './decor'
 import { say } from './i18n'
-import { THEMES } from './themes'
+import { drawScene, THEMES } from './themes'
 import {
   actorTip,
   actorX,
@@ -113,7 +113,7 @@ function house(s: SceneProps, play: Play): string {
   const art = THEMES[s.theme]
   const sceneAt = (t: number): Grid => {
     const g = blank()
-    art.draw(g, t, s, { hasClouds: false, isPlain: false })
+    drawScene(g, t, s, { hasClouds: false, isPlain: false })
     decorate(g, t, s)
     return g
   }
@@ -181,17 +181,20 @@ const escape = (text: string): string =>
 
 const FONT = "font-family=\"'PingFang TC','Noto Sans TC','Microsoft JhengHei',system-ui,sans-serif\""
 
-/** How far a holiday hat rises above the head, for the bubble to clear it. */
-const HAT_RISE = { santa: 4, witch: 5 } as const
+/** How far over his head the bubble must go: above a holiday hat, or an armful of books. */
+function headroom(a: SceneActor, s: SceneProps): number {
+  const hat = outfitOf(a, s).hat
+  return Math.max(hat === 'witch' ? 5 : hat === 'santa' ? 4 : 0, a.doing === 'tidy' ? 6 : 0)
+}
 
-function bubble(label: string, isMain: boolean, hat?: keyof typeof HAT_RISE): string {
+function bubble(label: string, isMain: boolean, rise: number): string {
   if (label === '') return ''
   const size = isMain ? 2.4 : 1.9
   const width = textWidth(label, size) + 1.6
   const height = size + 1.2
   const cx = REF + 8
   const x = Math.max(cx - width / 2, REF - 12)
-  const y = 13.2 - height - (isMain ? 0 : 1.2) - (hat === undefined ? 0 : HAT_RISE[hat])
+  const y = 13.2 - height - (isMain ? 0 : 1.2) - rise
   return (
     `<g class="quiet"><rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${width.toFixed(2)}" height="${height.toFixed(2)}" rx="0.8" fill="#FFFFFF" fill-opacity="0.94" stroke="#2A1A15" stroke-width="0.18"/>` +
     `<path d="M${cx - 0.8} ${(y + height).toFixed(2)}l0.8 1l0.8 -1z" fill="#FFFFFF"/>` +
@@ -222,7 +225,8 @@ function actor(a: SceneActor, index: number, s: SceneProps, now: number, play: P
     return layered(out, box)
   }
   const x = actorX(a, now)
-  const label = bubble(a.label, a.cap === null, outfitOf(a, s).hat)
+  // Asking, he holds up a sign of his own; the band's line says what for.
+  const label = a.doing === 'ask' ? '' : bubble(a.label, a.cap === null, headroom(a, s))
   const stay = `<g class="act">${frames(a.doing, LOOP, true)}</g>${PET}`
   const title = `<title>${escape(actorTip(a, s.lang))}</title>`
   if (x === a.toX) return `<g class="clawd" transform="translate(${a.toX - REF} 0)">${title}${stay}${label}</g>`
@@ -247,7 +251,7 @@ function signs(s: SceneProps): string {
 
 const rectOf = (b: Box, attrs = ''): string => `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" ${attrs}/>`
 
-/** The hover layer: every room, the board, the calendar, the lamp, the arcade and the window. */
+/** The hover layer: every room, the board, the calendar, Claude's memory, the lamp, the arcade and the window. */
 function hovers(s: SceneProps): string {
   const words = say(s.lang)
   const art = THEMES[s.theme]
@@ -263,6 +267,7 @@ function hovers(s: SceneProps): string {
     rooms +
     `<g class="spot">${rectOf(BOARD, 'class="glass"')}${ring(BOARD)}<title>${escape(board)}</title></g>` +
     `<g class="spot">${rectOf(CALENDAR, 'class="glass"')}${ring(CALENDAR)}<title>${escape(calendar)}</title></g>` +
+    `<g class="spot">${rectOf(art.memory.box, 'class="glass"')}${ring(art.memory.box)}<title>${escape(words.memoryTip(s.theme, s.memory))}</title></g>` +
     `<g class="spot">${rectOf(art.light.box, 'class="glass"')}${art.light.glow}<title>${escape(words.lights[s.theme])}</title></g>` +
     `<g class="spot">${rectOf(art.toy.box, 'class="glass"')}${art.toy.hi}<title>${escape(words.toys[s.theme])}</title></g>` +
     `<g class="spot">${rectOf({ x: 140, y: 5, w: 28, h: 11 }, 'class="glass"')}<title>${escape(s.theme === 'space' ? words.outsideSpace : words.outside[s.time])}</title></g>`

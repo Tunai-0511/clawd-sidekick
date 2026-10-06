@@ -5,7 +5,7 @@
 // so the Clawds behave the same anywhere; only what is around them changes.
 
 import type { SceneProps, Theme } from '../types'
-import { blank, C, digit, hash, px, rect, stamp, SW, type Box, type Grid } from './pixels'
+import { C, digit, hash, px, rect, stamp, SW, type Box, type Grid } from './pixels'
 
 export type Part = Box & { ticks: number }
 
@@ -22,6 +22,12 @@ export type ThemeArt = {
   sky: Box | null
   /** How the room names are lettered. */
   signs: { fill: string; stroke: string; y: number }
+  /**
+   * Claude's memory, in the library zone: how full the context is, from 0 to
+   * 10 tenths, as something the scene keeps there (books, data crystals).
+   * Every scene must show it, and show it changing; `box` is its hover.
+   */
+  memory: { box: Box; draw: (g: Grid, level: number) => void }
 }
 
 const ROOM_EDGES = [46, 94, 136, 174] as const
@@ -160,6 +166,63 @@ function driftingClouds(g: Grid, t: number, s: SceneProps, rows: readonly number
   })
 }
 
+// ── Claude's memory, in every scene's library zone ────────────────────────
+
+/** The two racks of the house's library and the station's archive. */
+const RACKS = [3, 30] as const
+const SHELVES = [5, 10, 15, 20] as const
+const CRYSTAL_ROWS = [6, 11, 16, 21] as const
+const BOOK_COLORS = [C.red, C.blue, C.green, C.yellow, C.purple, C.beige]
+
+/** Books on the shelves, top left to bottom right, as far as `level` tenths go; near full, a pile on the floor. */
+function houseMemory(g: Grid, level: number): void {
+  let columns = level * 8
+  for (const sx of RACKS) {
+    for (const shelf of SHELVES) {
+      const top = shelf + 1
+      const height = shelf === 20 ? 3 : 4
+      const end = sx + 1 + Math.min(10, Math.max(0, columns))
+      columns -= 10
+      let bx = sx + 1
+      while (bx < end) {
+        const h = hash(bx * 31 + shelf)
+        const width = 1 + (h % 2)
+        const tall = height - ((h >> 3) % 2)
+        rect(g, bx, top + height - tall, Math.min(width, end - bx), tall, BOOK_COLORS[(h >> 5) % 6] ?? C.red)
+        bx += width + ((h >> 8) % 3 === 0 ? 1 : 0)
+      }
+    }
+  }
+  for (let i = 0; i < Math.max(0, level - 7) * 2; i++) rect(g, 42, 23 - i, 2, 1, BOOK_COLORS[i % 6] ?? C.red)
+}
+
+/** The archive's data crystals, lit one by one as `level` tenths go; the rest dark. */
+function spaceMemory(g: Grid, level: number): void {
+  const crystals = [C.cyan, C.magenta, C.yellow, C.teal]
+  const lit = level * 4
+  let n = 0
+  for (const sx of RACKS) {
+    CRYSTAL_ROWS.forEach((shelf, row) => {
+      for (let k = 0; k < 5; k++) {
+        const color = n < lit ? (crystals[(k + row + sx) % 4] ?? C.cyan) : C.panelLine
+        rect(g, sx + 2 + k * 2, shelf + 1 + (hash(sx + k + row) % 2), 1, 2, color)
+        n++
+      }
+    })
+  }
+}
+
+/** Outdoors: a stack of books on the ground at `x`, eight high when the context is full. */
+function bookStack(g: Grid, x: number, level: number): void {
+  const books = Math.round(level * 0.8)
+  for (let i = 0; i < books; i++) {
+    const shift = hash(i * 13 + x) % 2
+    const color = BOOK_COLORS[(i * 5 + 1) % 6] ?? C.red
+    rect(g, x + shift, 24 - i, 5, 1, color)
+    px(g, x + shift + 4, 24 - i, C.white)
+  }
+}
+
 // ── The house ─────────────────────────────────────────────────────────────
 
 function house(g: Grid, t: number, s: SceneProps, o: { hasClouds: boolean; isPlain: boolean }): void {
@@ -190,23 +253,10 @@ function house(g: Grid, t: number, s: SceneProps, o: { hasClouds: boolean; isPla
     rect(g, edge - 2, 3, 2, 10, C.wood)
     rect(g, edge - 3, 12, 4, 1, C.beam)
   }
-  // Library
-  for (const sx of [3, 30]) {
+  // Library: the shelves (their books are houseMemory's)
+  for (const sx of RACKS) {
     rect(g, sx, 5, 12, 20, C.wood)
-    for (const shelf of [5, 10, 15, 20]) {
-      const top = shelf + 1
-      const height = shelf === 20 ? 3 : 4
-      rect(g, sx + 1, top, 10, height, C.woodLight)
-      let bx = sx + 1
-      while (bx < sx + 11) {
-        const h = hash(bx * 31 + shelf)
-        const width = 1 + (h % 2)
-        const tall = height - ((h >> 3) % 2)
-        const color = [C.red, C.blue, C.green, C.yellow, C.purple, C.beige][(h >> 5) % 6] ?? C.red
-        rect(g, bx, top + height - tall, Math.min(width, sx + 11 - bx), tall, color)
-        bx += width + ((h >> 8) % 3 === 0 ? 1 : 0)
-      }
-    }
+    for (const shelf of SHELVES) rect(g, sx + 1, shelf + 1, 10, shelf === 20 ? 3 : 4, C.woodLight)
   }
   rect(g, 18, 19, 11, 2, C.woodLight)
   rect(g, 18, 21, 1, 4, C.wood)
@@ -407,13 +457,9 @@ function space(g: Grid, t: number, s: SceneProps, o: { hasClouds: boolean; isPla
     rect(g, edge - 3, 12, 4, 1, C.metalLight)
   }
   // Archive pod: racks of data crystals, a desk, a holo-lamp
-  const crystals = [C.cyan, C.magenta, C.yellow, C.teal]
-  for (const sx of [3, 30]) {
+  for (const sx of RACKS) {
     rect(g, sx, 5, 12, 20, C.metal)
-    ;[6, 11, 16, 21].forEach((shelf, row) => {
-      rect(g, sx + 1, shelf, 10, row === 3 ? 3 : 4, C.space)
-      for (let k = 0; k < 5; k++) rect(g, sx + 2 + k * 2, shelf + 1 + (hash(sx + k + row) % 2), 1, 2, crystals[(k + row + sx) % 4] ?? C.cyan)
-    })
+    CRYSTAL_ROWS.forEach((shelf, row) => rect(g, sx + 1, shelf, 10, row === 3 ? 3 : 4, C.space))
   }
   rect(g, 18, 19, 11, 1, C.metalLight)
   rect(g, 23, 20, 1, 5, C.metal)
@@ -590,6 +636,7 @@ export const THEMES: Record<Theme, ThemeArt> = {
     toy: { box: { x: 176, y: 7, w: 10, h: 18 }, hi: ARCADE_HI },
     sky: { x: 141, y: 6, w: 26, h: 9 },
     signs: { fill: '#F3E3C3', stroke: 'none', y: 2.35 },
+    memory: { box: { x: 3, y: 5, w: 41, h: 20 }, draw: houseMemory },
   },
   beach: {
     draw: beach,
@@ -612,6 +659,7 @@ export const THEMES: Record<Theme, ThemeArt> = {
     },
     sky: { x: 0, y: 0, w: SW, h: 14 },
     signs: { fill: '#FFFFFF', stroke: '#2A1A15', y: 2.6 },
+    memory: { box: { x: 37, y: 16, w: 7, h: 9 }, draw: (g, level) => bookStack(g, 37, level) },
   },
   space: {
     draw: space,
@@ -626,6 +674,7 @@ export const THEMES: Record<Theme, ThemeArt> = {
     toy: { box: { x: 176, y: 7, w: 10, h: 18 }, hi: ARCADE_HI },
     sky: null,
     signs: { fill: '#BFF8FF', stroke: 'none', y: 2.35 },
+    memory: { box: { x: 3, y: 5, w: 39, h: 20 }, draw: spaceMemory },
   },
   forest: {
     draw: forest,
@@ -649,14 +698,18 @@ export const THEMES: Record<Theme, ThemeArt> = {
     },
     sky: { x: 0, y: 0, w: SW, h: 13 },
     signs: { fill: '#FFFFFF', stroke: '#2A1A15', y: 2.6 },
+    memory: { box: { x: 38, y: 16, w: 7, h: 9 }, draw: (g, level) => bookStack(g, 38, level) },
   },
 }
 
 export const THEME_ORDER: readonly Theme[] = ['house', 'beach', 'space', 'forest']
 
-/** A whole background for `theme`, for tests and previews. */
-export function backdrop(theme: Theme, t: number, s: SceneProps): Grid {
-  const g = blank()
-  THEMES[theme].draw(g, t, s, { hasClouds: true, isPlain: false })
-  return g
+/** Memory's level when the context is not known yet: a session just begun has read a little. */
+export const MEMORY_UNKNOWN = 2
+
+/** A scene at tick `t` and, in its library zone, Claude's memory: every surface draws through this. */
+export function drawScene(g: Grid, t: number, s: SceneProps, options: { hasClouds: boolean; isPlain: boolean }): void {
+  const art = THEMES[s.theme]
+  art.draw(g, t, s, options)
+  art.memory.draw(g, Math.max(0, Math.min(10, s.memory ?? MEMORY_UNKNOWN)))
 }

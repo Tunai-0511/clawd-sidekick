@@ -54,6 +54,10 @@ export const POSES: readonly Pose[] = [
   'love',
   'conduct',
   'quiz',
+  'ask',
+  'stamp',
+  'mail',
+  'tidy',
 ]
 
 /** Ticks before a pose's animation repeats. */
@@ -75,6 +79,10 @@ export const CYCLE: Record<Pose, number> = {
   love: 12,
   conduct: 8,
   quiz: 16,
+  ask: 8,
+  stamp: 8,
+  mail: 16,
+  tidy: 12,
 }
 
 export type FrameOptions = {
@@ -150,6 +158,9 @@ const NOTE = ['.u..', '.uu.', '.u.u', 'uu..', 'uu..']
 const NOTES = ['.uuuu', '.u..u', '.u..u', 'uu.uu', 'uu.uu']
 const BANG = ['rr', 'rr', 'rr', '..', 'rr']
 const QUESTION = ['.yy.', 'y..y', '...y', '..y.', '....', '..y.']
+const SIGN = ['wwwwwww', 'wwrrrww', 'wrwwwrw', 'wwwwrww', 'wwwrwww', 'wwwwwww', 'wwwrwww', 'lllllll']
+const PLANE = ['wwwwwww', 'wgwwwgw', 'wwgwgww', 'wwwrwww']
+const BOOKS = ['rrrrrr.', '.BBBBBB', 'GGGGGG.', '.yyyyy.']
 const Z_SMALL = ['lll', '.l.', 'lll']
 const Z_BIG = ['llll', '..l.', '.l..', 'llll']
 const DROP = ['.b', 'bb', 'bb']
@@ -450,6 +461,34 @@ export function frame(pose: Pose, t: number, options: FrameOptions = {}): Grid {
     case 'quiz': {
       clawd(g, base({ eyes: k === 9 ? 'blink' : 'open', look: look ?? 0, armR: 'up' }))
       stamp(g, 34, k % 8 < 4 ? 0 : 1, QUESTION)
+      break
+    }
+    case 'ask': {
+      const isTap = k < 2
+      clawd(g, base({ eyes: 'wide', armR: 'up', mouth: 'o' }))
+      stamp(g, 31, isTap ? 0 : 1, SIGN)
+      rect(g, 34, isTap ? 8 : 9, 1, 3, 17)
+      if (isTap) stamp(g, 2, 1, SPARKLE_B)
+      break
+    }
+    case 'stamp': {
+      const isDown = k >= 4
+      clawd(g, base({ eyes: 'happy', armR: isDown ? 'out' : 'up', isSquashed: isDown }))
+      rect(g, 30, 11, 9, 2, 9)
+      rect(g, 33, isDown ? 6 : 1, 3, 2, 17)
+      rect(g, 32, isDown ? 8 : 3, 5, 2, 6)
+      if (isDown) rect(g, 33, 11, 3, 1, 6)
+      break
+    }
+    case 'mail': {
+      clawd(g, base({ eyes: 'happy', look: 1, armR: k < 3 ? 'up' : 'wave', hasBlush: true }))
+      if (k >= 2 && k < 14) stamp(g, 29 + Math.floor((k - 2) * 0.6), 8 - Math.floor((k - 2) * 0.7), PLANE)
+      break
+    }
+    case 'tidy': {
+      const isUp = k % 12 < 2
+      clawd(g, base({ y: isUp ? 1 : 2, eyes: 'happy', armL: 'up', armR: 'up' }))
+      stamp(g, 31, isUp ? 2 : 3, BOOKS)
       break
     }
   }
