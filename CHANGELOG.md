@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.14.2
+
+- Neutral examples throughout: the `/deadline` usage, hints, README and tests no longer use real dates and tasks.
+
 ## 0.14.1
 
 - Every trophy now says what it asks, in a plain sentence with the next tier's target: the trophy pane has a line under each family ("Next (Silver): Work on 7 days in a row, for a party hat"), and the unlock toast says what was done. Some names read more plainly: All green, Pets, Marathon day (and in Chinese 測試全綠, 長回合, 工作馬拉松, 改檔, 工具呼叫, 摸摸 Clawd).

@@ -713,7 +713,7 @@ const en: Strings = {
   deadlineAdded: (title, date, left) => `Deadline noted: ${title}, ${date} (${left})`,
   noSuchDeadline: 'No such deadline. /deadline shows the list.',
   noDeadlines: 'No deadlines yet.',
-  usage: 'Usage: /deadline add 12/24 Report, /deadline add 2027-03-01 09:00 Launch, /deadline add tomorrow Laundry',
+  usage: 'Usage: /deadline add 12/24 Report, /deadline add 2027-03-01 09:00 Launch, /deadline add tomorrow Pay the rent',
   badDate: "Can't read that date.",
   left: {
     days: d => `${d} days left`,

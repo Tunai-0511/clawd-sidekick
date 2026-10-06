@@ -38,7 +38,7 @@ const sceneOf = (game: Game, time: TimeOfDay = 'day', lang: 'zh' | 'en' = 'zh', 
   urgency: 'near',
   game,
   time,
-  deadline: 'Launch · 12/24 23:59 · 剩 5 天',
+  deadline: 'Launch · 10/16 23:59 · 剩 10 天',
   lang,
   theme,
   memory: 5,
@@ -57,10 +57,10 @@ const sceneOf = (game: Game, time: TimeOfDay = 'day', lang: 'zh' | 'en' = 'zh', 
 
 describe('the pure parts', () => {
   test('a deadline without a year lands this year, at 23:59 Taipei time', async () => {
-    const parsed = parseDeadline('12/24 Launch', NOW, TAIPEI, 'zh')
-    expect(parsed).toEqual({ due: Date.UTC(2026, 9, 11, 15, 59), title: 'Launch' })
+    const parsed = parseDeadline('10/16 Launch', NOW, TAIPEI, 'zh')
+    expect(parsed).toEqual({ due: Date.UTC(2026, 9, 16, 15, 59), title: 'Launch' })
     const timed = parseDeadline('2027-03-01 09:00 Product review', NOW, TAIPEI, 'zh')
-    expect(timed).toEqual({ due: Date.UTC(2026, 9, 14, 5, 0), title: 'Product review' })
+    expect(timed).toEqual({ due: Date.UTC(2027, 2, 1, 1, 0), title: 'Product review' })
     expect('error' in parseDeadline('someday 繳費', NOW, TAIPEI, 'zh')).toBe(true)
     const tomorrow = parseDeadline('明天 繳費', NOW, TAIPEI, 'zh')
     expect('due' in tomorrow && tomorrow.due).toBe(Date.UTC(2026, 9, 7, 15, 59))
@@ -107,7 +107,7 @@ describe('the pure parts', () => {
     expect(tipOf(s, { kind: 'actor', id: 'main' })).toContain('改 register.tsx')
     expect(tipOf(s, { kind: 'actor', id: 'c1' })).toContain('在打電動')
     expect(tipOf(s, hitTest(s, later, 52, 8)!)).toContain('季報')
-    expect(tipOf(s, hitTest(s, later, 70, 8)!)).toContain('剩 5 天')
+    expect(tipOf(s, hitTest(s, later, 70, 8)!)).toContain('剩 10 天')
     expect(hitTest(s, later, 100, 6)).toEqual({ kind: 'room', id: 'terminal' })
     const english = sceneOf('pong', 'day', 'en')
     expect(tipOf(english, { kind: 'actor', id: 'c1' })).toBe('Blue-cap Clawd · playing the arcade')
@@ -584,14 +584,14 @@ describe('the band above the prompt', () => {
     await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
     const run = (command: string, args: string) => $.command.run({ command, args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
     // Five hours from now, written in Taipei time: a countdown that would tick every minute.
-    await run('deadline', `add ${new Date(NOW + 13 * 3_600_000).toISOString().slice(0, 16).replace('T', ' ')} Demo`)
+    await run('deadline', `add ${new Date(NOW + 13 * 3_600_000).toISOString().slice(0, 16).replace('T', ' ')} Launch`)
     await $.turn.start({ text: '幫我修 bug', turnId: 't0' })
     // Past the walk to the court and the deadline's one alarm.
     await w.clock.advance(60_000)
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const source = async (): Promise<string> => String((await ui.find({ type: 'Svg' }))?.props.source)
     const first = await source()
-    expect(first).toContain('Demo')
+    expect(first).toContain('Launch')
     expect(first).toContain('在打排球')
     for (let i = 0; i < 12; i++) {
       await w.clock.advance(5_000)
@@ -663,10 +663,10 @@ describe('the band above the prompt', () => {
     const w = world(on)
     await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
     await $.turn.start({ text: '幫我改登入頁', turnId: 't1' })
-    await $.turn.complete({ answer: '串接寫好了。接下來請你到設定頁更新密鑰。', durationMs: 1000, isAborted: false, turnId: 't1', reason: 'answer' })
+    await $.turn.complete({ answer: '改好了。接下來請你自己跑一次部署，再更新一下設定裡的密鑰。', durationMs: 1000, isAborted: false, turnId: 't1', reason: 'answer' })
     await w.clock.advance(60_000)
     const answers = []
-    for (const [command, args] of [['clawd', ''], ['clawd', 'recap'], ['clawd', 'trophies'], ['clawd', 'hat'], ['clawd', 'scene beach'], ['clawd', 'lang en'], ['clawd', 'season auto'], ['deadline', 'add 12/24 Demo'], ['deadline', ''], ['deadline', 'rm 1']] as const) {
+    for (const [command, args] of [['clawd', ''], ['clawd', 'recap'], ['clawd', 'trophies'], ['clawd', 'hat'], ['clawd', 'scene beach'], ['clawd', 'lang en'], ['clawd', 'season auto'], ['deadline', 'add 12/24 Launch'], ['deadline', ''], ['deadline', 'rm 1']] as const) {
       answers.push(await $.command.run({ command, args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } }))
     }
     expect(w.prompts).toHaveLength(0)
@@ -677,11 +677,11 @@ describe('the band above the prompt', () => {
   test('a deadline shows its countdown on the band, the board and the calendar', async ($, on) => {
     const w = world(on)
     await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
-    const added = await $.command.run({ command: 'deadline', args: 'add 12/24 Launch', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    const added = await $.command.run({ command: 'deadline', args: 'add 10/16 Launch', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
     expect(added.text).toBeUndefined()
-    expect(w.toasts.at(-1)).toContain('剩 5 天')
+    expect(w.toasts.at(-1)).toContain('剩 10 天')
     const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
-    expect(await band.find({ text: /Launch 剩 5 天/ })).toBeDefined()
+    expect(await band.find({ text: /Launch 剩 10 天/ })).toBeDefined()
     expect(String((await band.find({ type: 'Svg' }))?.props.source)).toContain('日曆：Launch')
     expect(String((await band.find({ type: 'Svg' }))?.props.source)).toContain('布告欄：截止日')
   })
