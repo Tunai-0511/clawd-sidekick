@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.0
+
+- **Compacting, Clawd squashes the talk down.** While the conversation is compacted, the spinner's Clawd stands on a messy pile of pages, jumps and stomps it flat, then again into a neat bundle tied with a red strap, cheers while it sparkles, and hops onto the next pile. In the terminal he stands on a pile that sinks a little every beat.
+
 ## 0.15.1
 
 - Removed 0.14.3's step-row Clawd: the Desktop app draws a folded step's header itself, so it never showed.

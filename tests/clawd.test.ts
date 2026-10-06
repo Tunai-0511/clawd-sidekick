@@ -908,6 +908,33 @@ describe('the band above the prompt', () => {
     expect(await desktop.find({ text: /thinking/, in: 'spinner' })).toBeUndefined()
   })
 
+  test('while the talk is compacted, the spinner Clawd stomps a pile of pages flat', async ($, on) => {
+    world(on)
+    const SPINNER = { plugin: 'clawd-sidekick', component: 'Spinner' } as const
+    const props = { word: 'Working', message: null, suffix: '…', mode: 'requesting' as const }
+    const squashing = 'viewBox="9 6 24 19"'
+    let during = ''
+    let duringTerminal = false
+    on('session.compact', async () => {
+      const ui = await $.ui.mount({ ...SPINNER, surface: 'desktop', props })
+      during = String((await ui.find({ type: 'Svg' }))?.props.source)
+      const terminal = await $.ui.mount({ ...SPINNER, surface: 'terminal', props })
+      duringTerminal = (await terminal.find({ text: /[▇▆▅▄▃▂]{7}/, in: 'spinner' })) !== undefined
+      return { messages: [{ role: 'user', text: '摘要', toolUses: [] }] } as never
+    })
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    await $.session.compact({ trigger: 'manual', messages: [{ role: 'user', text: '摘要', toolUses: [] }] as never })
+    expect(during).toContain(squashing)
+    expect(duringTerminal).toBe(true)
+    // Done compacting, he is back to thinking.
+    const after = await $.ui.mount({ ...SPINNER, surface: 'desktop', props })
+    expect(String((await after.find({ type: 'Svg' }))?.props.source)).not.toContain(squashing)
+    // The host's own words for it are enough too.
+    const told = await $.ui.mount({ ...SPINNER, surface: 'desktop', props: { ...props, message: 'Compacting session' } })
+    expect(String((await told.find({ type: 'Svg' }))?.props.source)).toContain(squashing)
+    expect(await told.find({ text: /Compacting session/, in: 'spinner' })).toBeDefined()
+  })
+
   test('the season and the holiday can be set by hand and handed back to the date', async ($, on) => {
     const w = world(on)
     await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })

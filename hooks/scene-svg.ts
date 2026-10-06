@@ -29,6 +29,8 @@ import {
   PAL_TO,
   drawClawd,
   drawLaptop,
+  drawSquash,
+  SQUASH_LOOP,
   isNervous,
   outfitOf,
   playOf,
@@ -401,6 +403,25 @@ export function miniClawdSvg(doing: Doing, isOnLaptop = false): string {
     } else {
       drawClawd(g, REF, t, doing, null)
     }
+    frames.push(g)
+  }
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${box.x} ${box.y} ${box.w} ${box.h}" width="100%" height="100%" shape-rendering="crispEdges">` +
+    `<style>:root{color-scheme:light dark;background:transparent}${STILL}</style>${layered(frames, box)}</svg>`
+  )
+}
+
+/**
+ * The spinner's Clawd while the conversation is compacted, stomping a messy
+ * pile of pages into a neat bundle. Three rows taller than `miniClawdSvg`
+ * for his jumps: drawn 30 × 23.75, his pixels are the same size.
+ */
+export function squashClawdSvg(): string {
+  const box: Box = { x: REF - 3, y: 6, w: 24, h: 19 }
+  const frames: Grid[] = []
+  for (let t = 0; t < SQUASH_LOOP; t++) {
+    const g = blank()
+    drawSquash(g, REF, t)
     frames.push(g)
   }
   return (

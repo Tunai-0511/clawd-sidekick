@@ -1,5 +1,6 @@
 // The spinner, Clawd's way: on the terminal the CLI banner's own Clawd,
-// blinking, thinking in dots, or at work on a laptop, tapping at its keys,
+// blinking, thinking in dots, at work on a laptop, tapping at its keys, or
+// standing on a pile of pages he squashes flat while the talk is compacted,
 // beside the word and a clock that counts every second; on the desktop the
 // clock and the word alone, beside the hooks module's animated Clawd.
 
@@ -12,7 +13,7 @@ type Props = {
   mode: string
   /** When the turn began, wall-clock milliseconds. */
   startedAt: number
-  doing: 'think' | 'type' | 'code'
+  doing: 'think' | 'type' | 'code' | 'squash'
   isTerminal: boolean
 }
 
@@ -21,6 +22,9 @@ type Live = { t: number }
 const ORANGE = '#D97757'
 const LID = '#C9CDD3'
 const DECK = '#8A8F98'
+const PAGES = '#FCE7A6'
+/** The pile under him, stomped a little lower each tick, then a new one. */
+const PILE = ['▇', '▇', '▆', '▅', '▄', '▃', '▂', '▂']
 
 function elapsed(startedAt: number): string {
   const seconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
@@ -55,7 +59,13 @@ const SpinnerClient: ClientModule<Props, Live> = (props, surface) => {
   const head = <Text color={ORANGE}>{isBlink ? ' ▐█████▌' : ' ▐▛███▜▌'}</Text>
   // At work: the lid hides his lower half, the deck his legs, and his arms take turns at the keys.
   const clawd =
-    props.doing === 'think' ? (
+    props.doing === 'squash' ? (
+      <Box flexDirection="column">
+        {head}
+        <Text color={ORANGE}>{t % 8 === 4 ? '▗▟█████▙▖' : '▝▜█████▛▘'}</Text>
+        <Text color={PAGES}>{` ${(PILE[t % 8] ?? '▇').repeat(7)} `}</Text>
+      </Box>
+    ) : props.doing === 'think' ? (
       <Box flexDirection="column">
         {head}
         <Text color={ORANGE}>▝▜█████▛▘</Text>

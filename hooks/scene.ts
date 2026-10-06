@@ -619,6 +619,93 @@ export function drawLaptop(g: Grid, x: number, t: number): void {
   if (t % 4 === 3) px(g, x + 14, y + 8, C.white)
 }
 
+/** Ticks in one round of the spinner's compacting Clawd. */
+export const SQUASH_LOOP = 28
+
+type SquashStep = { pile: 0 | 2 | 3 | 5; hop: number; eyes: Eyes; arms: Arm; puff: 0 | 1 | 2; poof?: boolean; sparkle?: 0 | 1 | 2 }
+
+/**
+ * Tick by tick: he eyes a messy pile of five pages, jumps, and stomps it to
+ * three; jumps again and stomps it into a neat bundle tied with a red strap;
+ * cheers while it sparkles; then hops up, the bundle goes in a puff, and he
+ * lands on the next messy pile.
+ */
+const SQUASH: readonly SquashStep[] = [
+  { pile: 5, hop: 0, eyes: 'down', arms: 'mid', puff: 0 },
+  { pile: 5, hop: 0, eyes: 'down', arms: 'mid', puff: 0 },
+  { pile: 5, hop: 0, eyes: 'blink', arms: 'mid', puff: 0 },
+  { pile: 5, hop: 0, eyes: 'down', arms: 'low', puff: 0 },
+  { pile: 5, hop: 2, eyes: 'up', arms: 'up', puff: 0 },
+  { pile: 5, hop: 3, eyes: 'up', arms: 'up', puff: 0 },
+  { pile: 3, hop: 0, eyes: 'closed', arms: 'low', puff: 2 },
+  { pile: 3, hop: 0, eyes: 'closed', arms: 'low', puff: 1 },
+  { pile: 3, hop: 0, eyes: 'down', arms: 'mid', puff: 0 },
+  { pile: 3, hop: 0, eyes: 'down', arms: 'low', puff: 0 },
+  { pile: 3, hop: 2, eyes: 'up', arms: 'up', puff: 0 },
+  { pile: 3, hop: 3, eyes: 'up', arms: 'up', puff: 0 },
+  { pile: 2, hop: 0, eyes: 'closed', arms: 'low', puff: 2 },
+  { pile: 2, hop: 0, eyes: 'closed', arms: 'low', puff: 1 },
+  { pile: 2, hop: 0, eyes: 'happy', arms: 'up', puff: 0, sparkle: 2 },
+  { pile: 2, hop: 1, eyes: 'happy', arms: 'up', puff: 0, sparkle: 2 },
+  { pile: 2, hop: 0, eyes: 'happy', arms: 'up', puff: 0, sparkle: 1 },
+  { pile: 2, hop: 1, eyes: 'happy', arms: 'up', puff: 0, sparkle: 1 },
+  { pile: 2, hop: 0, eyes: 'happy', arms: 'mid', puff: 0, sparkle: 2 },
+  { pile: 2, hop: 0, eyes: 'happy', arms: 'mid', puff: 0, sparkle: 1 },
+  { pile: 2, hop: 0, eyes: 'happy', arms: 'mid', puff: 0 },
+  { pile: 2, hop: 0, eyes: 'open', arms: 'low', puff: 0 },
+  { pile: 2, hop: 3, eyes: 'up', arms: 'up', puff: 0 },
+  { pile: 0, hop: 5, eyes: 'up', arms: 'up', puff: 0, poof: true },
+  { pile: 5, hop: 2, eyes: 'down', arms: 'up', puff: 0, poof: true },
+  { pile: 5, hop: 1, eyes: 'down', arms: 'mid', puff: 0 },
+  { pile: 5, hop: 0, eyes: 'down', arms: 'mid', puff: 0 },
+  { pile: 5, hop: 0, eyes: 'open', arms: 'mid', puff: 0 },
+]
+
+/** The pile under him, `height` rows up from the floor: loose pages, or at two rows the tied bundle. */
+function drawPile(g: Grid, x: number, height: number): void {
+  if (height === 2) {
+    rect(g, x + 2, FEET - 1, 12, 1, C.white)
+    rect(g, x + 2, FEET, 12, 1, C.beige)
+    rect(g, x + 7, FEET - 1, 2, 2, C.red)
+    return
+  }
+  const offsets = height === 5 ? [0, 1, -1, 2, 0] : [0, 1, 0]
+  const colors = [C.white, C.pageNear, C.sky, C.pink, C.white]
+  for (let j = 0; j < height; j++) rect(g, x + 1 + (offsets[j] ?? 0), FEET - j, 14, 1, colors[j] ?? C.white)
+}
+
+/** The spinner's Clawd while the conversation is compacted: one tick of `SQUASH`, at `x`. */
+export function drawSquash(g: Grid, x: number, t: number): void {
+  const step = SQUASH[((t % SQUASH_LOOP) + SQUASH_LOOP) % SQUASH_LOOP] ?? SQUASH[0]!
+  drawPile(g, x, step.pile)
+  // On a pile his legs reach its top row; in the air, they dangle.
+  const stand = step.pile === 0 ? 3 : step.pile - 1
+  drawClawd(g, x, t, 'idle', null, 0, { look: 0, eyes: step.eyes, armL: step.arms, armR: step.arms, lift: stand + step.hop })
+  const top = FEET - step.pile + 1
+  if (step.puff > 0) {
+    px(g, x - 1, top, C.light)
+    px(g, x + 16, top, C.light)
+    if (step.puff === 2) {
+      px(g, x - 2, top - 1, C.white)
+      px(g, x + 17, top - 1, C.white)
+    }
+  }
+  if (step.poof) {
+    rect(g, x + 1, FEET - 1, 14, 2, C.light)
+    for (const dx of [2, 5, 9, 12]) px(g, x + dx, FEET - 2, C.white)
+    for (const dx of [3, 7, 11]) px(g, x + dx, FEET, C.white)
+  }
+  if (step.sparkle !== undefined && step.sparkle > 0) {
+    px(g, x + 18, FEET - 4, C.white)
+    if (step.sparkle === 2) {
+      px(g, x + 17, FEET - 4, C.yellow)
+      px(g, x + 19, FEET - 4, C.yellow)
+      px(g, x + 18, FEET - 5, C.yellow)
+      px(g, x + 18, FEET - 3, C.yellow)
+    }
+  }
+}
+
 /** A deadline under three days away makes the main Clawd sweat. */
 export const isNervous = (s: SceneProps): boolean => s.urgency === 'near' || s.urgency === 'urgent'
 

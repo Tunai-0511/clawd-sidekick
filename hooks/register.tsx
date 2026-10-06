@@ -14,7 +14,7 @@ import type { Activity, Changes, Day, Deadline, Doing, Egg, Game, GitState, Hat,
 import { countdown, formatDue, newId, parseDeadline, parseOffset, urgency, URGENCY_COLOR } from './deadline'
 import { langOf, say, type Lang } from './i18n'
 import { actorX, eggOf, layoutFor, ROOMS, SH, SPOT_X, SW, type Spot } from './scene'
-import { doneClawdSvg, miniClawdSvg, sceneSvg } from './scene-svg'
+import { doneClawdSvg, miniClawdSvg, sceneSvg, squashClawdSvg } from './scene-svg'
 import { H, W } from './sprite'
 import { THEME_ORDER } from './themes'
 import { clawdSvg } from './svg'
@@ -73,6 +73,7 @@ const namesAtom = atom({ plugin: 'clawd-sidekick', key: 'names' } as const, {})
 const gitAtom = atom({ plugin: 'clawd-sidekick', key: 'git' } as const, null)
 const changesAtom = atom({ plugin: 'clawd-sidekick', key: 'changes' } as const, NO_CHANGES)
 const openRowsAtom = atom({ plugin: 'clawd-sidekick', key: 'openRows' } as const, [])
+const compactingAtom = atom({ plugin: 'clawd-sidekick', key: 'compacting' } as const, false)
 const seasonPickAtom = atom({ plugin: 'clawd-sidekick', key: 'seasonPick' } as const, 'auto')
 const holidayPickAtom = atom({ plugin: 'clawd-sidekick', key: 'holidayPick' } as const, 'auto')
 
@@ -1041,9 +1042,11 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Spinner' }, async ($, e, next) => {
-    const [usage, talk] = await Promise.all([read($, usageAtom), read($, langAtom)])
+    const [usage, talk, isCompacting] = await Promise.all([read($, usageAtom), read($, langAtom), read($, compactingAtom)])
     const mode = e.props.mode
-    const doing = mode === 'tool-use' || mode === 'tool-input' ? 'type' : mode === 'responding' ? 'code' : 'think'
+    // Compacting, he stomps the conversation's pages down into a bundle.
+    const isSquashing = isCompacting || /compact/i.test(e.props.message ?? '')
+    const doing = isSquashing ? 'squash' : mode === 'tool-use' || mode === 'tool-input' ? 'type' : mode === 'responding' ? 'code' : 'think'
     const props = {
       word: e.props.message ?? e.props.word,
       suffix: e.props.suffix,
@@ -1061,7 +1064,11 @@ export const register: Register = (on, options) => {
       const { Box, Svg, Client } = $.ui.resolve(e)
       return (
         <Box flexDirection="row" gap={1} alignItems="center">
-          <Svg source={miniClawdSvg(doing, doing !== 'think')} alt="Clawd" width={30} height={20} />
+          {doing === 'squash' ? (
+            <Svg source={squashClawdSvg()} alt="Clawd" width={30} height={23.75} />
+          ) : (
+            <Svg source={miniClawdSvg(doing, doing !== 'think')} alt="Clawd" width={30} height={20} />
+          )}
           <Client key="spinner" module="./spinner-client.tsx" props={props} />
         </Box>
       )
@@ -1739,11 +1746,17 @@ export const register: Register = (on, options) => {
   on('session.compact', async ($, e, next) => {
     if (e.agentId !== undefined || e.trigger === 'precompute') return next(e)
     try {
+      await update($, compactingAtom, () => true)
       await act($, 'tidy', say(lang).compacting)
     } catch {
       // Compaction goes ahead whatever Clawd is doing.
     }
-    const compacted = await next(e)
+    let compacted
+    try {
+      compacted = await next(e)
+    } finally {
+      await update($, compactingAtom, () => false).catch(() => undefined)
+    }
     try {
       await logDay($, day => {
         day.compactions++

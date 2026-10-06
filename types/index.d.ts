@@ -321,6 +321,8 @@ declare module 'claude-code' {
       changes: Changes
       /** The finished tool rows the person opened, by tool_use_id. */
       openRows: string[]
+      /** True while the conversation is being compacted, for the spinner's Clawd. */
+      compacting: boolean
     }
   }
 }
