@@ -278,6 +278,13 @@ async function logDay($: Engine, change: (day: Day) => void): Promise<void> {
   await update($, todayAtom, () => day)
 }
 
+/** Today's figures as the store has them, for the idle line, without writing anything. */
+async function loadToday($: Engine): Promise<void> {
+  const date = dateOf(await $.clock.now(), await read($, offsetAtom))
+  const kept = (await $.store.get(`day:${date}`)) as Day | undefined
+  await update($, todayAtom, () => (kept === undefined ? null : { ...emptyDay(date), ...kept, rooms: { ...emptyDay(date).rooms, ...kept.rooms } }))
+}
+
 /** Today and the six days before it, oldest first, and the streak of days with work. */
 async function readWeek($: Engine): Promise<{ today: Day; week: (Day | undefined)[]; streak: number }> {
   const date = dateOf(await $.clock.now(), await read($, offsetAtom))
@@ -709,6 +716,47 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
+  // Between turns, Clawd stands by on the prompt's hint line: what he is up
+  // to, how long the last turn took, how long today has run. The terminal
+  // keeps the engine's line and its live pills and adds a tail; the desktop
+  // draws him beside the engine's own hint.
+  on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
+    if (e.props.isWorking || e.props.isDraft) return next(e)
+    const [doing, actors, game, today, offset, talk, now] = await Promise.all([
+      read($, activity),
+      read($, actorsAtom),
+      read($, gameAtom),
+      read($, todayAtom),
+      read($, offsetAtom),
+      read($, langAtom),
+      read($, nowAtom),
+    ])
+    const w = say(talk)
+    const isAsleep = game === 'sleep' && !isWorking
+    const word = isAsleep ? w.doings.sleep : doing.label || w.idle
+    const details: string[] = []
+    if (lastTurnMs > 0) details.push(`${w.lastTurn} ${Math.floor(lastTurnMs / 60_000)}:${String(Math.floor((lastTurnMs % 60_000) / 1000)).padStart(2, '0')}`)
+    if (today !== null && today.date === dateOf(now || (await $.clock.now()), offset) && today.workMs > 0) details.push(w.todayWorked(duration(today.workMs, talk)))
+    if (e.surface === 'terminal') {
+      return next({ ...e, props: { ...e.props, tail: ` · Clawd ${[word, ...details].join(' · ')}` } })
+    }
+    if (e.surface !== 'desktop') return next(e)
+    const STANDING: readonly Doing[] = ['idle', 'wait', 'read', 'love', 'cheer', 'oops', 'sleep']
+    const main = actors.find(a => a.cap === null)?.doing ?? 'idle'
+    const pose: Doing = isAsleep ? 'sleep' : STANDING.includes(main) ? main : 'idle'
+    const { Box, Text, Svg } = $.ui.resolve(e)
+    return (
+      <Box flexDirection="row" gap={1} alignItems="center">
+        <Svg source={miniClawdSvg(pose)} alt="Clawd" width={30} height={20} />
+        <Text color={ORANGE} bold>
+          {word}
+        </Text>
+        {details.length === 0 ? null : <Text dimColor>{details.join(' · ')}</Text>}
+        {e.props.hint === '' ? null : <Text dimColor>{`· ${e.props.hint}`}</Text>}
+      </Box>
+    )
+  })
+
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const [doing, todos, deadlines, pets, offset, project, talk] = await Promise.all([
       read($, activity),
@@ -870,6 +918,7 @@ export const register: Register = (on, options) => {
     await update($, nowAtom, () => Date.now())
     lang = await chooseLang($)
     await update($, langAtom, () => lang)
+    await loadToday($)
     await act($, 'idle', '')
     $.clock.every(5_000, () => void tickClock($))
     void checkClock($)

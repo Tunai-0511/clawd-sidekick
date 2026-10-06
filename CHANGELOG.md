@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.1
+
+- Between turns, Clawd stands by on the hint line under the prompt: waving when it's your turn, standing by at the start, asleep late at night, with how long the last turn took and today's total. The desktop draws him beside the engine's own hint; the terminal keeps its line and adds a tail.
+
 ## 0.10.0
 
 - **Clawd's day**: `/clawd recap`, or **Today** in the `/clawd` pane, shows a card of the day so far: time worked alongside Claude, turns, tool calls, files edited, commands, tests passed, commits, pushes, tidy-ups, the time by room, the week and the streak of days with work. It counts every session and project, one record per local date, and is drawn to be screenshotted and shared (an SVG card on the desktop, text and colour bars in the terminal).

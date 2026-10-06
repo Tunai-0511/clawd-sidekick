@@ -83,6 +83,9 @@ export type Strings = {
   due: (title: string, left: string) => string
   turn: string
   lastTurn: string
+  /** The prompt's hint line while nothing runs: Clawd standing by. */
+  idle: string
+  todayWorked: (duration: string) => string
   tools: string
   edited: string
   files: (count: number) => string
@@ -248,6 +251,8 @@ const zh: Strings = {
   due: (title, left) => `截止 ${title} ${left}`,
   turn: '回合',
   lastTurn: '上回合',
+  idle: '待機中',
+  todayWorked: duration => `今天 ${duration}`,
   tools: '工具',
   edited: '改',
   files: count => `${count} 檔`,
@@ -451,6 +456,8 @@ const en: Strings = {
   due: (title, left) => `Due: ${title} ${left}`,
   turn: 'turn',
   lastTurn: 'last turn',
+  idle: 'Standing by',
+  todayWorked: duration => `${duration} today`,
   tools: 'tools',
   edited: 'edited',
   files: count => (count === 1 ? '1 file' : `${count} files`),

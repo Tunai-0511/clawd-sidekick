@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'claude-code/testing'
+import type { RenderElement } from 'claude-code'
 
 import type { Doing, Game, SceneActor, SceneProps, Season, Theme, TimeOfDay } from '../types'
 import { countdown, parseDeadline, urgency } from '../hooks/deadline'
@@ -503,6 +504,32 @@ describe('the band above the prompt', () => {
     expect(await narrow.find({ text: /Clawd · .* · 沒有待辦/ })).toBeDefined()
     await narrow.press({ key: 'expand' })
     expect(String((await narrow.find({ type: 'Svg' }))?.props.source)).toContain('遊戲間')
+  })
+
+  test('between turns Clawd stands by on the hint line, and gives it back while Claude works', async ($, on) => {
+    world(on)
+    // The engine's own line: its hint, and a plugin's tail after it.
+    on('ui.render', { component: 'PromptHint' }, async ($, e) => {
+      const { Text } = $.ui.resolve(e)
+      return h(Text, { dimColor: true }, `${e.props.hint}${e.props.tail ?? ''}`) as RenderElement
+    })
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    const hint = (surface: 'terminal' | 'desktop', isWorking: boolean) =>
+      $.ui.mount({ plugin: 'clawd-sidekick', surface, component: 'PromptHint', props: { isDraft: false, isWorking, hint: '? for shortcuts' } })
+    const desktop = await hint('desktop', false)
+    expect(await desktop.find({ type: 'Svg' })).toBeDefined()
+    expect(await desktop.find({ text: /待機中/ })).toBeDefined()
+    expect(await desktop.find({ text: /\? for shortcuts/ })).toBeDefined()
+    const terminal = await hint('terminal', false)
+    expect(await terminal.find({ text: /Clawd 待機中/ })).toBeDefined()
+    const working = await hint('desktop', true)
+    expect(await working.find({ type: 'Svg' })).toBeUndefined()
+    expect(await working.find({ text: '? for shortcuts' })).toBeDefined()
+    await $.turn.start({ text: '修 bug', turnId: 't5' })
+    await $.turn.complete({ turnId: 't5', reason: 'answer', answer: '好了', durationMs: 64_000 } as never)
+    const after = await hint('desktop', false)
+    expect(await after.find({ text: /輪到你了/ })).toBeDefined()
+    expect(await after.find({ text: /上回合 1:04/ })).toBeDefined()
   })
 
   test('the spinner is a thinking Clawd with a clock that keeps counting', async ($, on) => {
