@@ -1020,6 +1020,29 @@ export const register: Register = (on, options) => {
     )
   })
 
+  // The desktop folds a run of calls into one step row ("Checking the
+  // changelog…") with spinning dots. While its step runs and it is folded,
+  // Clawd takes those dots' place, with what the step is doing and its clock;
+  // opened, or done, the row is the engine's again.
+  on('ui.render', { component: 'ToolGroup' }, async ($, e, next) => {
+    const running = e.props.calls.find(call => call.isRunning)
+    if (e.surface !== 'desktop' || !e.props.isActive || e.props.isExpanded || running === undefined) return next(e)
+    const input = (running.input ?? {}) as Record<string, unknown>
+    const words = str(input.description) || TOOL_WORDS[running.tool] || `Using ${running.tool}`
+    const id = running.tool_use_id ?? ''
+    const { Box, Svg, Client } = $.ui.resolve(e)
+    return (
+      <Box flexDirection="row" gap={1} alignItems="center">
+        <Svg source={miniClawdSvg('type', true)} alt="Clawd" width={30} height={20} />
+        <Client
+          key={`group-${id || running.tool}`}
+          module="./spinner-client.tsx"
+          props={{ word: clip(words, 60), suffix: '…', mode: '', startedAt: toolStarted.get(id) ?? Date.now(), doing: 'type', isTerminal: false }}
+        />
+      </Box>
+    )
+  })
+
   // Between turns, Clawd stands by on the prompt's hint line: what he is up
   // to, how long the last turn took, how long today has run. The terminal
   // keeps the engine's line and its live pills and adds a tail; the desktop

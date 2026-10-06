@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.14.3
+
+- In the Desktop app, a folded step that is still running ("Checking the changelog…" with spinning dots) shows Clawd at his laptop in the dots' place, with what the step is doing and its clock. Opened, or once done, the row is the app's own again.
+
 ## 0.14.2
 
 - Neutral examples throughout: the `/deadline` usage, hints, README and tests no longer use real dates and tasks.
