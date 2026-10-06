@@ -11,6 +11,10 @@ export type Theme = 'house' | 'beach' | 'space' | 'forest'
 
 export type SpinnerMode = 'requesting' | 'responding' | 'thinking' | 'tool-input' | 'tool-use'
 
+type WeatherWord = 'clear' | 'cloudy' | 'rain' | 'storm' | 'snow' | 'fog'
+type SeasonWord = 'spring' | 'summer' | 'autumn' | 'winter'
+type HolidayWord = 'none' | 'lunarNewYear' | 'halloween' | 'christmas'
+
 type Doings =
   | 'idle'
   | 'read'
@@ -146,6 +150,25 @@ export type Strings = {
   outsideSpace: string
   noTodos: string
   modes: Record<SpinnerMode, string>
+  // Weather, seasons, holidays
+  weathers: Record<WeatherWord, string>
+  seasons: Record<SeasonWord, string>
+  holidays: Record<HolidayWord, string>
+  outsideWith: (outside: string, weather: string) => string
+  weatherLabel: string
+  weatherOff: string
+  weatherStatus: (place: string, temperature: string, weather: string) => string
+  weatherSet: (place: string, temperature: string, weather: string) => string
+  weatherManual: (weather: string) => string
+  weatherNotFound: (city: string) => string
+  weatherFailed: string
+  weatherTurnedOff: string
+  seasonSet: (season: string) => string
+  seasonAuto: (season: string) => string
+  seasonUsage: string
+  holidaySet: (holiday: string) => string
+  holidayAuto: (holiday: string) => string
+  holidayUsage: string
 }
 
 const zh: Strings = {
@@ -199,10 +222,10 @@ const zh: Strings = {
   deadlines: '截止日',
   remove: '移除',
   petted: count => `被摸了 ${count} 次`,
-  describeClawd: 'Clawd 副駕：打開面板（/clawd scene 換場景、/clawd hide 收合、/clawd lang en 換英文）',
+  describeClawd: 'Clawd 副駕：打開面板（/clawd scene 換場景、/clawd weather 城市 看真實天氣、/clawd hide 收合、/clawd lang en 換英文）',
   describeTodo: 'Clawd 幫你記的人類待辦',
   describeDeadline: '截止日雷達：越接近 Clawd 越慌',
-  hintClawd: '[scene 名稱|hide|show|lang zh|en|auto]',
+  hintClawd: '[scene 名稱|weather 城市|season|holiday|hide|show|lang]',
   hintTodo: '[add 事情|done N|undo|rm N|clear]',
   hintDeadline: '[add 12/24 名稱|rm N]',
   folded: 'Clawd 收成一行了，/clawd show 叫他回來。',
@@ -297,6 +320,24 @@ const zh: Strings = {
   outsideSpace: '窗外：無邊的宇宙',
   noTodos: '沒有待辦',
   modes: { requesting: '等回應', responding: '回覆中', thinking: '思考中', 'tool-input': '準備工具', 'tool-use': '用工具' },
+  weathers: { clear: '晴', cloudy: '多雲', rain: '下雨', storm: '雷雨', snow: '下雪', fog: '起霧' },
+  seasons: { spring: '春天', summer: '夏天', autumn: '秋天', winter: '冬天' },
+  holidays: { none: '平常日', lunarNewYear: '農曆新年', halloween: '萬聖節', christmas: '聖誕節' },
+  outsideWith: (outside, weather) => `${outside}・${weather}`,
+  weatherLabel: '天氣',
+  weatherOff: '真實天氣沒開。打 /clawd weather 加城市名就會開始抓天氣，任何語言都行，例如 台北、Tokyo、São Paulo，也可以直接給經緯度。',
+  weatherStatus: (place, temperature, weather) => `${place} ${temperature}，${weather}（每 30 分鐘更新一次，/clawd weather off 關掉）`,
+  weatherSet: (place, temperature, weather) => `Clawd 們開始看 ${place} 的天氣了：${temperature}，${weather}。`,
+  weatherManual: weather => `天氣固定成「${weather}」。打 /clawd weather 加城市名改看真實天氣，/clawd weather off 關掉。`,
+  weatherNotFound: city => `找不到「${city}」。換個寫法試試，或直接給經緯度，例如 /clawd weather 25.03,121.56`,
+  weatherFailed: '天氣服務暫時連不上，等一下再試。',
+  weatherTurnedOff: '真實天氣關掉了，Clawd 們只看時間和季節。',
+  seasonSet: season => `季節固定成${season}。/clawd season auto 改回跟著日期。`,
+  seasonAuto: season => `季節跟著日期走，現在是${season}。`,
+  seasonUsage: '用法：/clawd season spring、summer、autumn、winter，或 auto 跟著日期',
+  holidaySet: holiday => `節日佈置固定成${holiday}。/clawd holiday auto 改回跟著日期。`,
+  holidayAuto: holiday => `節日跟著日期走，現在是${holiday}。`,
+  holidayUsage: '用法：/clawd holiday lunar（農曆新年）、halloween、christmas、none（不佈置），或 auto 跟著日期',
 }
 
 const en: Strings = {
@@ -350,10 +391,10 @@ const en: Strings = {
   deadlines: 'Deadlines',
   remove: 'Remove',
   petted: count => (count === 1 ? 'Petted once' : `Petted ${count} times`),
-  describeClawd: 'Clawd Sidekick: open the pane (/clawd scene changes the scene, /clawd hide folds the band, /clawd lang zh switches to Chinese)',
+  describeClawd: 'Clawd Sidekick: open the pane (/clawd scene changes the scene, /clawd weather <city> follows real weather, /clawd hide folds the band, /clawd lang zh switches to Chinese)',
   describeTodo: 'The things Clawd noted for you to do',
   describeDeadline: 'Deadline radar: the closer it gets, the more Clawd frets',
-  hintClawd: '[scene name|hide|show|lang en|zh|auto]',
+  hintClawd: '[scene name|weather city|season|holiday|hide|show|lang]',
   hintTodo: '[add something|done N|undo|rm N|clear]',
   hintDeadline: '[add 12/24 name|rm N]',
   folded: 'Clawd folded into one line. /clawd show brings him back.',
@@ -448,6 +489,24 @@ const en: Strings = {
   outsideSpace: 'Outside: the endless dark',
   noTodos: 'no to-dos',
   modes: { requesting: 'requesting', responding: 'responding', thinking: 'thinking', 'tool-input': 'preparing a tool', 'tool-use': 'using tools' },
+  weathers: { clear: 'clear', cloudy: 'cloudy', rain: 'rain', storm: 'thunderstorm', snow: 'snow', fog: 'fog' },
+  seasons: { spring: 'spring', summer: 'summer', autumn: 'autumn', winter: 'winter' },
+  holidays: { none: 'an ordinary day', lunarNewYear: 'Lunar New Year', halloween: 'Halloween', christmas: 'Christmas' },
+  outsideWith: (outside, weather) => `${outside}, ${weather}`,
+  weatherLabel: 'weather',
+  weatherOff: 'Real weather is off. /clawd weather and a city turns it on, in any language: London, 台北, São Paulo, or coordinates.',
+  weatherStatus: (place, temperature, weather) => `${place} ${temperature}, ${weather} (checked every 30 minutes; /clawd weather off turns it off)`,
+  weatherSet: (place, temperature, weather) => `The Clawds now watch the weather in ${place}: ${temperature}, ${weather}.`,
+  weatherManual: weather => `The weather is set to ${weather}. /clawd weather and a city follows the real weather; /clawd weather off turns it off.`,
+  weatherNotFound: city => `Couldn't find "${city}". Try another spelling, or coordinates such as /clawd weather 51.51,-0.13`,
+  weatherFailed: "The weather service isn't answering; try again in a bit.",
+  weatherTurnedOff: 'Real weather is off; the Clawds follow only the time and the season.',
+  seasonSet: season => `The season is set to ${season}. /clawd season auto follows the date again.`,
+  seasonAuto: season => `The season follows the date: it's ${season}.`,
+  seasonUsage: 'Usage: /clawd season spring, summer, autumn, winter, or auto to follow the date',
+  holidaySet: holiday => `Decorations are set to ${holiday}. /clawd holiday auto follows the date again.`,
+  holidayAuto: holiday => `Holidays follow the date: today is ${holiday}.`,
+  holidayUsage: 'Usage: /clawd holiday lunar (Lunar New Year), halloween, christmas, none, or auto to follow the date',
 }
 
 const STRINGS: Record<Lang, Strings> = { zh, en }

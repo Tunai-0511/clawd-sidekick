@@ -113,6 +113,28 @@ const HEX = {
   flameHot: '#FF6A2B',
   ember: '#FFE08A',
   radio: '#4A6B3A',
+  // Weather, seasons, holidays
+  overcastTop: '#7D8A97',
+  overcast: '#94A1AD',
+  overcastLow: '#AAB5BE',
+  stormTop: '#3F4753',
+  storm: '#515A67',
+  stormLow: '#636D7A',
+  nightCloud: '#26304A',
+  seaGray: '#5E7F96',
+  rain: '#A9C7E8',
+  snow: '#F4F8FB',
+  snowShade: '#D5E2EC',
+  pumpkin: '#F08A24',
+  pumpkinDark: '#C2661A',
+  autumnRed: '#C8452E',
+  autumnOrange: '#E07B2E',
+  autumnYellow: '#E8B33A',
+  blossom: '#F6B6C8',
+  lantern: '#D8312F',
+  gold: '#F2C14E',
+  fir: '#2E8B57',
+  witch: '#6B4BA8',
 } as const
 
 export type Color = keyof typeof HEX

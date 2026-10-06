@@ -72,6 +72,23 @@ export type Game = 'pong' | 'volley' | 'rope' | 'tower' | 'sleep'
 /** Where the Clawds live: every scene has the same five zones. */
 export type Theme = 'house' | 'beach' | 'space' | 'forest'
 
+/** What the sky is doing; 'clear' while real weather is off. */
+export type Weather = 'clear' | 'cloudy' | 'rain' | 'storm' | 'snow' | 'fog'
+
+export type Season = 'spring' | 'summer' | 'autumn' | 'winter'
+
+export type Holiday = 'none' | 'lunarNewYear' | 'halloween' | 'christmas'
+
+/** Where the weather comes from: nowhere, a city's forecast, or a word typed by hand. */
+export type WeatherState = {
+  mode: 'off' | 'city' | 'manual'
+  place?: { name: string; latitude: number; longitude: number; country: string }
+  weather: Weather
+  temperature: number | null
+  isFahrenheit: boolean
+  checkedAt: number
+}
+
 /** The person's time of day, for the window. */
 export type TimeOfDay = 'day' | 'dusk' | 'night'
 
@@ -108,6 +125,9 @@ export type SceneProps = {
   /** The language the house's signs and tips speak. */
   lang: 'zh' | 'en'
   theme: Theme
+  weather: Weather
+  season: Season
+  holiday: Holiday
 }
 
 /** The status line figures: model, context, plan windows, cost, this turn. */
@@ -142,6 +162,10 @@ declare module 'claude-code' {
       /** The language Clawd speaks: what the person chose, else the system's. */
       lang: 'zh' | 'en'
       theme: Theme
+      weather: WeatherState
+      /** A season or holiday chosen by hand, else 'auto' (the local date). */
+      seasonPick: Season | 'auto'
+      holidayPick: Holiday | 'auto'
     }
   }
 }

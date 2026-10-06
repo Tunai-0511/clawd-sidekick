@@ -36,6 +36,16 @@
 
 ![遊戲間：桌球加電玩、黃昏跳繩、疊積木、深夜睡覺](./docs/game-room.png)
 
+**天氣、季節、節日**：場景跟著你那邊的日曆變化，全世界都適用。
+
+- **季節**：照你當地的日期。春天樹上開花、花瓣飄落；秋天森林轉紅金色、落葉紛飛；冬天每隻 Clawd 都圍上圍巾。設定城市後，在南半球季節會自動顛倒。
+- **節日**：農曆新年掛紅燈籠，萬聖節擺南瓜、戴巫師帽，聖誕節放聖誕樹、戴聖誕帽。
+- **真實天氣（要的話）**：打 `/clawd weather 台北` 就會開始看那個城市的天氣。任何城市、任何語言都可以，例如 Tokyo、Москва、القاهرة，也可以直接給經緯度。
+  - 有陰天、下雨、會閃電的雷雨、會積雪的下雪、起霧。
+  - 小屋從窗戶看得到外面的天氣，太空站沒有天氣。
+  - 溫度用攝氏，美國等少數地方用華氏。
+  - 預設關閉，設定城市才會開始；`/clawd weather off` 關掉。
+
 **滑鼠互動**：
 - **桌面版**：移到 Clawd 身上，他會跳、冒愛心，說明會告訴你他在做什麼。移到布告欄會列出待辦，移到日曆會顯示截止日。每個場景的燈會亮，玩具也會打招呼：電玩機、沙堡裡探頭的小螃蟹、營火的火花。
 - **終端機**：小屋下面那行會說明游標底下是什麼，點一下 Clawd 就是摸他。
@@ -67,12 +77,25 @@ claude plugin install clawd-sidekick@clawd-sidekick
 
 裝好之後，在已開的 session 執行 `/reload-plugins`，或開一個新的 session。
 
+### 自動更新
+
+第三方 marketplace 預設不會自動更新，作者也沒辦法替你打開。請自己開一次：
+1. 執行 `/plugin`
+2. 進入 **Marketplaces**
+3. 選 **clawd-sidekick**
+4. 選 **Enable auto-update**
+
+之後新版本會在背景下載，下次開 Claude Code 就是新版。沒開的話，想更新時執行 `claude plugin update clawd-sidekick@clawd-sidekick`。
+
 ## 指令
 
 | 指令 | 用途 |
 | --- | --- |
 | `/clawd` | 打開面板：大 Clawd、完整待辦清單、所有截止日 |
 | `/clawd scene house`、`beach`、`space`、`forest`、`next` | 讓 Clawd 們搬到別的場景 |
+| `/clawd weather 城市`、`off`、`下雨` | 看某個城市的真實天氣、關掉，或手動指定（晴、多雲、下雨、雷雨、下雪、起霧） |
+| `/clawd season winter`、`auto` | 手動指定季節，或跟著日期 |
+| `/clawd holiday christmas`、`lunar`、`halloween`、`none`、`auto` | 手動指定節日佈置，或跟著日期 |
 | `/clawd hide`、`/clawd show` | 把橫條收成一行，或展開 |
 | `/clawd lang zh`、`en`、`auto` | 切換語言（`auto` 跟著系統） |
 | `/todo` | 列出待辦；也可以 `add 事情`、`done N`、`undo`、`rm N`、`clear` |
@@ -92,9 +115,12 @@ mod 是用你的權限在跑，所以這裡列出它碰到的所有東西（`cla
 
 - **模型呼叫**：只在回覆看起來有交代你做事時（例如「你需要…」「請上傳…」），用 `todoModel` 呼叫一次。除此之外不會呼叫模型。
 - **執行程式**：啟動時跑一次 `date +%z` 取得時區。語言設成 `auto` 又沒有 `LANG` 時，在 macOS 上跑一次 `defaults read -g AppleLanguages`。
-- **儲存**：待辦、截止日、場景、語言和被摸的次數，存在你電腦上這個 plugin 自己的儲存區。
+- **儲存**：待辦、截止日、場景、語言、天氣城市和被摸的次數，存在你電腦上這個 plugin 自己的儲存區。
 - **環境變數**：讀取 `LANG`、`LC_ALL`、`LC_MESSAGES`。
-- **不連網。**
+- **網路：沒開天氣就完全不連網。**
+  - 打 `/clawd weather 城市` 時查一次城市位置：先問 Open-Meteo，它不認得這個名字才問 OpenStreetMap 的 Nominatim。送出的只有你打的城市名。
+  - 之後每 30 分鐘向 `api.open-meteo.com` 抓一次天氣，送出的只有經緯度。
+  - 這兩個服務都免費，也不需要金鑰。
 
 ## 開發
 

@@ -6,6 +6,7 @@
 // Clawd, the board and the calendar carry a tooltip. `color-scheme` on the
 // root keeps the surface's frame transparent.
 
+import { decorate, decorParts, weatherSvg } from './decor'
 import { say } from './i18n'
 import { THEMES } from './themes'
 import {
@@ -19,6 +20,7 @@ import {
   gameRoom,
   drawClawd,
   isNervous,
+  outfitOf,
   playOf,
   playPose,
   ROOMS,
@@ -111,13 +113,14 @@ function house(s: SceneProps, play: Play): string {
   const sceneAt = (t: number): Grid => {
     const g = blank()
     art.draw(g, t, s, { hasClouds: false, isPlain: false })
+    decorate(g, t, s)
     return g
   }
   const scene = sceneAt(0)
   const still = blank()
   drawBackground(still, 0, s, play, { hasClouds: false })
   const isBare = (i: number): boolean => still[i] === scene[i]
-  const moving = art.parts.map(part => {
+  const moving = [...art.parts, ...decorParts(s)].map(part => {
     const frames: Grid[] = []
     for (let t = 0; t < part.ticks; t++) frames.push(sceneAt(t))
     return overStill(frames, part, isBare)
@@ -141,7 +144,7 @@ function covers(s: SceneProps, play: Play, now: number): string {
 /** Clouds drift on their own: across the house's window, or the whole sky outdoors. */
 function clouds(s: SceneProps): string {
   const sky = THEMES[s.theme].sky
-  if (sky === null || s.time === 'night') return ''
+  if (sky === null || s.time === 'night' || (s.weather !== 'clear' && s.weather !== 'cloudy')) return ''
   const fill = s.time === 'dusk' ? '#FBD3C0' : '#FFFFFF'
   if (s.theme === 'house') {
     return (
@@ -205,7 +208,11 @@ function actor(a: SceneActor, index: number, s: SceneProps, now: number, play: P
     const out: Grid[] = []
     for (let t = 0; t < ticks; t++) {
       const g = blank()
-      drawClawd(g, REF, t, doing, a.cap, index * 3, { ...(isPlaying ? playPose(a, t, play) : {}), isSweating: isPlaying && a.cap === null && isNervous(s) })
+      drawClawd(g, REF, t, doing, a.cap, index * 3, {
+        ...(isPlaying ? playPose(a, t, play) : {}),
+        ...outfitOf(a, s),
+        isSweating: isPlaying && a.cap === null && isNervous(s),
+      })
       out.push(g)
     }
     return layered(out, box)
@@ -254,7 +261,7 @@ function hovers(s: SceneProps): string {
     `<g class="spot">${rectOf(CALENDAR, 'class="glass"')}${ring(CALENDAR)}<title>${escape(calendar)}</title></g>` +
     `<g class="spot">${rectOf(art.light.box, 'class="glass"')}${art.light.glow}<title>${escape(words.lights[s.theme])}</title></g>` +
     `<g class="spot">${rectOf(art.toy.box, 'class="glass"')}${art.toy.hi}<title>${escape(words.toys[s.theme])}</title></g>` +
-    `<g class="spot">${rectOf({ x: 140, y: 5, w: 28, h: 11 }, 'class="glass"')}<title>${escape(s.theme === 'space' ? words.outsideSpace : words.outside[s.time])}</title></g>`
+    `<g class="spot">${rectOf({ x: 140, y: 5, w: 28, h: 11 }, 'class="glass"')}<title>${escape(s.theme === 'space' ? words.outsideSpace : s.weather === 'clear' ? words.outside[s.time] : words.outsideWith(words.outside[s.time], words.weathers[s.weather]))}</title></g>`
   )
 }
 
@@ -284,6 +291,7 @@ export function sceneSvg(s: SceneProps, now: number): string {
     hovers(s) +
     order.map(({ a, i }) => actor(a, i, s, now, play)).join('') +
     covers(s, play, now) +
+    weatherSvg(s) +
     '</svg>'
   )
 }

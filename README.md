@@ -36,6 +36,12 @@
 
 ![The game room: ping-pong and arcade, jump rope at dusk, a block tower, everyone asleep at night](./docs/game-room.png)
 
+**Weather, seasons and holidays.** The scenes follow the calendar wherever you are:
+
+- **Seasons**, from your local date: blossoms and drifting petals in spring, a red-and-gold forest and falling leaves in autumn, scarves on every Clawd in winter. South of the equator (once you set a city) the seasons turn over.
+- **Holidays**: lanterns for Lunar New Year, pumpkins and a witch's hat for Halloween, a tree and a Santa hat for Christmas.
+- **Real weather, if you want it**: `/clawd weather London` (or `台北`, `Москва`, `القاهرة`, any city in any script, or coordinates such as `51.51,-0.13`). It brings overcast skies, rain, thunderstorms with lightning, snow that settles on the ground, and fog. The house sees it through its window, and the space station has none. Temperatures show in °C, or °F in the US and the few other places that read Fahrenheit. It's off until you name a city; `/clawd weather off` turns it off again.
+
 **Hover everything.** In the Desktop app, a Clawd under the pointer hops and shows hearts, and his tooltip says what he's doing. The board lists your to-dos and the calendar names the deadline. Each scene's light switches on, and its toy says hi: the arcade, a crab peeking out of the sandcastle, or sparks from the campfire. In the terminal, the line under the house tells you what's under the pointer, and a click pets that Clawd.
 
 **A Clawd spinner.** The `Thinking…` line becomes a small Clawd who thinks in dots or taps his feet while a tool runs, beside a clock that counts every second.
@@ -65,12 +71,19 @@ Or from inside a session:
 
 Run `/reload-plugins` in an open session, or start a new one.
 
+### Get updates automatically
+
+Third-party marketplaces don't auto-update by default, and a marketplace can't switch that on for you. Turn it on once: run `/plugin`, open **Marketplaces**, choose **clawd-sidekick**, and select **Enable auto-update**. New versions then download in the background and load the next time you start Claude Code. Without it, run `claude plugin update clawd-sidekick@clawd-sidekick` when you want the latest.
+
 ## Commands
 
 | Command | What it does |
 | --- | --- |
 | `/clawd` | Open the Clawd Sidekick pane: big Clawd, your full to-do list, all deadlines |
 | `/clawd scene house` · `beach` · `space` · `forest` · `next` | Move the Clawds to another scene |
+| `/clawd weather <city>` · `off` · `rain` | Follow a city's real weather, turn it off, or set one by hand (`clear`, `cloudy`, `rain`, `storm`, `snow`, `fog`) |
+| `/clawd season winter` · `auto` | Set the season by hand, or follow the date |
+| `/clawd holiday christmas` · `lunar` · `halloween` · `none` · `auto` | Set the decorations by hand, or follow the date |
 | `/clawd hide` · `/clawd show` | Fold the band to one line, or unfold it |
 | `/clawd lang en` · `zh` · `auto` | Switch language (`auto` follows the system) |
 | `/todo` | List your to-dos; also `add <text>`, `done N`, `undo`, `rm N`, `clear` |
@@ -92,15 +105,16 @@ A mod runs with your permissions, so here is everything this one reaches (`claud
 
 - **Model calls**: only after a turn whose reply looks like it hands you something ("you'll need to…", "please upload…"), one short call to `todoModel`. Nothing else calls a model.
 - **Processes**: `date +%z` once at start, for your time zone; `defaults read -g AppleLanguages` once, on macOS, when the language is `auto` and no `LANG` is set.
-- **Storage**: your to-dos, deadlines, scene, language and pet count, in the plugin's own store on your machine.
+- **Storage**: your to-dos, deadlines, scene, language, weather city and pet count, in the plugin's own store on your machine.
 - **Environment**: reads `LANG`, `LC_ALL` and `LC_MESSAGES`.
-- **No network.**
+- **Network: none, unless you turn on weather.** Then `/clawd weather <city>` looks the city up once: it asks Open-Meteo's geocoder, then OpenStreetMap's Nominatim if Open-Meteo doesn't know the name, and sends only the text you typed. After that it fetches the forecast from `api.open-meteo.com` every 30 minutes, sending only the coordinates. Both services are free and need no key.
 
 ## How it works
 
 - `hooks/themes.ts` draws the four scenes procedurally on a 256 × 28 canvas (`hooks/pixels.ts`). `hooks/scene.ts` adds the Clawds, the crew's places in each game, and what the pointer finds.
 - **Desktop app**: `hooks/scene-svg.ts` turns it into one interactive SVG in three layers. The still scene is drawn once. Each of the scene's moving parts loops as a SMIL flipbook of only the pixels that change, and the game being played is a layer of its own, so their periods never multiply. Walking is `animateTransform`, and hovering is CSS `:hover` and `<title>`. `color-scheme: light dark` on the root keeps the frame transparent on any theme.
 - **Terminal**: `hooks/scene-client.tsx` is a `Client` surface module with its own frame clock. It draws two pixels per cell with `▀`, and its camera follows Clawd across a crop of up to 150 columns.
+- `hooks/decor.ts` adds the holidays, the snow on the ground and what falls through the air; `hooks/weather.ts` works out the season, the holiday and the forecast.
 - `hooks/i18n.ts` holds every string in both languages.
 
 ## Develop

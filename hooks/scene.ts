@@ -11,6 +11,7 @@
 import type { Doing, Game, SceneActor, SceneProps, Theme, TimeOfDay } from '../types'
 import { say, type Lang, type RoomId } from './i18n'
 import { blank, C, FEET, FLOOR, px, rect, type Box, type Grid } from './pixels'
+import { decorate, drawFalling } from './decor'
 import { THEMES } from './themes'
 
 export type { Doing, Game, SceneActor, SceneProps, Theme, TimeOfDay }
@@ -264,6 +265,7 @@ export type BackgroundOptions = {
 export function drawBackground(g: Grid, t: number, s: SceneProps, play: Play, options: BackgroundOptions = {}): void {
   const { hasClouds = true, isPlain = false } = options
   THEMES[s.theme].draw(g, t, s, { hasClouds, isPlain })
+  decorate(g, t, s)
   gameRoom(g, t, play)
 }
 
@@ -288,7 +290,7 @@ type Eyes = 'open' | 'blink' | 'happy' | 'closed' | 'up' | 'down' | 'wide'
 type Arm = 'mid' | 'up' | 'low'
 
 /** What a game asks of a player on top of his own pose: where to look, his arms, a jump. */
-export type Mod = { look?: number; armL?: Arm; armR?: Arm; lift?: number; eyes?: Eyes; isSweating?: boolean }
+export type Mod = { look?: number; armL?: Arm; armR?: Arm; lift?: number; eyes?: Eyes; isSweating?: boolean; hasScarf?: boolean; hat?: 'santa' | 'witch' }
 
 /** A Clawd at the CLI banner's own size: 16 × 10, feet on the floor at FEET. */
 export function drawClawd(g: Grid, x: number, t: number, doing: Doing | 'walk', cap: string | null, phase = 0, mod: Mod = {}): void {
@@ -442,6 +444,27 @@ export function drawClawd(g: Grid, x: number, t: number, doing: Doing | 'walk', 
     rect(g, bx + 5, y - 2, 6, 1, color)
     rect(g, bx + 7, y - 3, 2, 1, C.white)
   }
+  if (mod.hasScarf) {
+    rect(g, bx + 2, y + 6, 12, 1, C.red)
+    px(g, bx + 5, y + 6, C.white)
+    px(g, bx + 9, y + 6, C.white)
+    rect(g, bx + 10, y + 7, 2, 2, C.red)
+    px(g, bx + 10, y + 8, C.white)
+  }
+  if (mod.hat === 'santa') {
+    rect(g, bx + 3, y - 1, 10, 1, C.white)
+    rect(g, bx + 4, y - 2, 8, 1, C.red)
+    rect(g, bx + 6, y - 3, 6, 1, C.red)
+    rect(g, bx + 9, y - 4, 4, 1, C.red)
+    px(g, bx + 13, y - 4, C.white)
+    px(g, bx + 13, y - 3, C.white)
+  } else if (mod.hat === 'witch') {
+    rect(g, bx + 2, y - 1, 12, 1, C.witch)
+    rect(g, bx + 5, y - 2, 6, 1, C.pumpkin)
+    rect(g, bx + 6, y - 3, 4, 1, C.witch)
+    rect(g, bx + 7, y - 4, 2, 1, C.witch)
+    px(g, bx + 8, y - 5, C.witch)
+  }
   drawProps(g, bx, y, k, doing)
   if (mod.isSweating && k % 24 < 9) {
     const drop = Math.floor((k % 24) / 3)
@@ -452,6 +475,12 @@ export function drawClawd(g: Grid, x: number, t: number, doing: Doing | 'walk', 
 
 /** A deadline under three days away makes the main Clawd sweat. */
 export const isNervous = (s: SceneProps): boolean => s.urgency === 'near' || s.urgency === 'urgent'
+
+/** What the date has the Clawds wear: scarves in winter or snow, a hat for the main Clawd on holidays. */
+export function outfitOf(a: SceneActor, s: SceneProps): Mod {
+  const hat = a.cap !== null ? undefined : s.holiday === 'christmas' ? 'santa' : s.holiday === 'halloween' ? 'witch' : undefined
+  return { hasScarf: s.season === 'winter' || s.weather === 'snow', ...(hat === undefined ? {} : { hat }) }
+}
 
 function drawProps(g: Grid, x: number, y: number, k: number, doing: Doing | 'walk'): void {
   switch (doing) {
@@ -599,9 +628,10 @@ export function composeScene(s: SceneProps, t: number, now: number, options: Com
     const x = actorX(actor, now)
     const doing = x !== actor.toX ? 'walk' : actor.id === options.hover ? 'love' : actor.doing
     const mod = doing === actor.doing ? playPose(actor, t, play) : {}
-    drawClawd(g, x, t, doing, actor.cap, i * 3, { ...mod, isSweating: actor.cap === null && isNervous(s) })
+    drawClawd(g, x, t, doing, actor.cap, i * 3, { ...mod, ...outfitOf(actor, s), isSweating: actor.cap === null && isNervous(s) })
   })
   blankets(g, play, s, now)
+  drawFalling(g, t, s)
   return g
 }
 

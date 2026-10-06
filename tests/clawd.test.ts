@@ -1,11 +1,12 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import type { Game, SceneActor, SceneProps, Theme, TimeOfDay } from '../types'
+import type { Game, SceneActor, SceneProps, Theme, TimeOfDay, Weather } from '../types'
 import { countdown, parseDeadline, urgency } from '../hooks/deadline'
 import { hitTest, layoutFor, SPOT_X, tipOf } from '../hooks/scene'
 import { sceneSvg } from '../hooks/scene-svg'
 import { CYCLE, frame, H, POSES, W } from '../hooks/sprite'
 import { isDuplicate, parseList, shouldExtract } from '../hooks/todo'
+import { forecastUrl, holidayOf, parseNominatimPlace, placeOfCoordinates, seasonOf, usesFahrenheit, weatherOfCode } from '../hooks/weather'
 import { BAND, NOW, SURFACES, world } from './world'
 
 const TAIPEI = 480
@@ -22,7 +23,7 @@ const crewIn = (game: Game): SceneActor[] =>
     label: '',
   }))
 
-const sceneOf = (game: Game, time: TimeOfDay = 'day', lang: 'zh' | 'en' = 'zh', theme: Theme = 'house'): SceneProps => ({
+const sceneOf = (game: Game, time: TimeOfDay = 'day', lang: 'zh' | 'en' = 'zh', theme: Theme = 'house', weather: Weather = 'clear'): SceneProps => ({
   actors: [{ id: 'main', cap: null, fromX: SPOT_X.library, toX: SPOT_X.code, departAt: NOW - 500, doing: 'code', label: '改 register.tsx' }, ...crewIn(game)],
   todos: 2,
   days: 5,
@@ -33,6 +34,9 @@ const sceneOf = (game: Game, time: TimeOfDay = 'day', lang: 'zh' | 'en' = 'zh', 
   deadline: 'Launch · 12/24 23:59 · 剩 5 天',
   lang,
   theme,
+  weather,
+  season: 'autumn',
+  holiday: 'none',
 })
 
 describe('the pure parts', () => {
@@ -122,6 +126,41 @@ describe('the pure parts', () => {
     expect(sceneSvg(sceneOf('volley', 'night', 'zh', 'beach'), NOW)).toContain('沙灘球場')
     expect(sceneSvg(sceneOf('pong', 'day', 'en', 'forest'), NOW)).toContain('Campfire')
     expect(sceneSvg(sceneOf('pong', 'day', 'en', 'space'), NOW)).toContain('Outside: the endless dark')
+  })
+})
+
+describe('the sky, the season and the holidays', () => {
+  test('seasons follow the local date, turned over south of the equator', async () => {
+    expect(seasonOf(NOW, TAIPEI)).toBe('autumn')
+    expect(seasonOf(NOW, TAIPEI, -33.87)).toBe('spring')
+    expect(seasonOf(Date.UTC(2026, 0, 15), 0)).toBe('winter')
+  })
+
+  test('holidays come from the local date', async () => {
+    expect(holidayOf(NOW, TAIPEI)).toBe('none')
+    expect(holidayOf(Date.UTC(2026, 1, 16, 4), TAIPEI)).toBe('lunarNewYear')
+    expect(holidayOf(Date.UTC(2026, 9, 31, 4), TAIPEI)).toBe('halloween')
+    expect(holidayOf(Date.UTC(2026, 11, 25, 4), TAIPEI)).toBe('christmas')
+  })
+
+  test('any place on Earth: WMO codes, Nominatim names in any script, Fahrenheit where it is read', async () => {
+    expect([0, 2, 45, 63, 75, 95].map(weatherOfCode)).toEqual(['clear', 'cloudy', 'fog', 'rain', 'snow', 'storm'])
+    const cairo = parseNominatimPlace('[{"name":"القاهرة","lat":"30.04","lon":"31.23","address":{"country_code":"eg"}}]')
+    expect(cairo).toEqual({ name: 'القاهرة', latitude: 30.04, longitude: 31.23, country: 'EG' })
+    expect(placeOfCoordinates('-33.87, 151.21')?.latitude).toBe(-33.87)
+    expect(usesFahrenheit('US')).toBe(true)
+    expect(usesFahrenheit('TW')).toBe(false)
+    expect(forecastUrl({ name: 'NYC', latitude: 40.7, longitude: -74, country: 'US' })).toContain('temperature_unit=fahrenheit')
+  })
+
+  test('weather falls only where it can be seen, and every kind stays inside the size limit', async () => {
+    for (const theme of ['house', 'beach', 'space', 'forest'] as const) {
+      for (const weather of ['rain', 'storm', 'snow', 'fog'] as const) {
+        const svg = sceneSvg(sceneOf('volley', 'day', 'zh', theme, weather), NOW)
+        expect(svg.length).toBeLessThan(131072)
+        expect(svg.includes('clip-path="url(#weather)"')).toBe(theme !== 'space')
+      }
+    }
   })
 })
 
@@ -296,5 +335,43 @@ describe('the band above the prompt', () => {
     const desktop = await $.ui.mount({ plugin: 'clawd-sidekick', surface: 'desktop', component: 'Spinner', props })
     expect(await desktop.find({ type: 'Svg' })).toBeDefined()
     expect(await desktop.find({ text: /Thinking…/, in: 'spinner' })).toBeDefined()
+  })
+
+  test('/clawd weather finds a city in any script and follows its forecast', async ($, on) => {
+    world(on)
+    const asked: string[] = []
+    on('http.fetch', (_$, e) => {
+      asked.push(e.url)
+      const text = e.url.includes('geocoding-api')
+        ? '{"generationtime_ms":0.1}'
+        : e.url.includes('nominatim')
+          ? '[{"name":"臺北市","lat":"25.04","lon":"121.56","address":{"country_code":"tw"}}]'
+          : '{"current":{"weather_code":63,"temperature_2m":22.6}}'
+      return { value: { status: 200, ok: true, headers: {}, text } }
+    })
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    const run = (args: string) => $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    const set = await run('weather 台北')
+    expect(set.text).toContain('台北')
+    expect(set.text).toContain('23°C')
+    expect(asked.some(url => url.includes('nominatim'))).toBe(true)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...BAND.props } })
+    await run('scene beach')
+    expect(await ui.find({ text: /23°C 下雨/ })).toBeDefined()
+    expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toContain('url(#weather)')
+    expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toContain('#A9C7E8')
+    expect((await run('weather off')).text).toContain('關掉')
+    expect(String((await ui.find({ type: 'Svg' }))?.props.source)).not.toContain('#A9C7E8')
+  })
+
+  test('the season and the holiday can be set by hand and handed back to the date', async ($, on) => {
+    world(on)
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    const run = (args: string) => $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    expect((await run('holiday christmas')).text).toContain('聖誕節')
+    expect((await run('season winter')).text).toContain('冬天')
+    expect((await run('weather 下雪')).text).toContain('下雪')
+    expect((await run('holiday auto')).text).toContain('平常日')
+    expect((await run('season nope')).text).toContain('用法')
   })
 })
