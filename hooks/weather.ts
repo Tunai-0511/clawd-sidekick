@@ -1,6 +1,7 @@
 // What the sky is doing: the season and holiday from the person's local date
-// (no network), and, only once they name a city, the real weather from
-// Open-Meteo (free, no key; the city's coordinates are all it is sent).
+// (no network), and the real weather from Open-Meteo (free, no key). The
+// city comes from the system's time zone (Asia/Taipei → Taipei), so nothing
+// looks up the person's IP; they can name another city, or turn it off.
 // Any city on Earth, named in any script: Open-Meteo's geocoder first, then
 // OpenStreetMap's Nominatim for the names it does not know. South of the
 // equator the seasons turn over; in the US and a few other places the
@@ -78,16 +79,33 @@ export function placeOfCoordinates(text: string): Place | undefined {
   return { name: `${latitude.toFixed(2)},${longitude.toFixed(2)}`, latitude, longitude, country: '' }
 }
 
-/** Open-Meteo's geocoder: quick, but it knows place names in Latin letters only. */
-export function openMeteoPlaceUrl(city: string): string {
-  return `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city.trim())}&count=1&format=json`
+/** The IANA zone a path or TZ value names: ".../zoneinfo/Asia/Taipei" → "Asia/Taipei". */
+export function zoneOf(text: string): string | undefined {
+  const value = text.trim()
+  const zone = value.includes('zoneinfo/') ? value.slice(value.lastIndexOf('zoneinfo/') + 'zoneinfo/'.length) : value.replace(/^:/, '')
+  return /^[A-Za-z]+\/[A-Za-z0-9_+\-/]+$/.test(zone) ? zone : undefined
 }
 
-export function parseOpenMeteoPlace(text: string): Place | undefined {
+/** The city a zone is named after: "America/Argentina/Buenos_Aires" → "Buenos Aires"; none for "Etc/GMT+8". */
+export function cityOfZone(zone: string): string | undefined {
+  if (/^(Etc|SystemV|US|Canada)\//.test(zone)) return undefined
+  const city = zone.split('/').pop()?.replace(/_/g, ' ')
+  return city === undefined || /\d/.test(city) ? undefined : city
+}
+
+/** Open-Meteo's geocoder: quick, names in the person's language, but it reads Latin letters only. */
+export function openMeteoPlaceUrl(city: string, language = 'en'): string {
+  return `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city.trim())}&count=5&language=${language}&format=json`
+}
+
+/** The first result, or the first in `zone` when one is (Paris, France over Paris, Texas). */
+export function parseOpenMeteoPlace(text: string, zone?: string): Place | undefined {
   try {
-    const first = (JSON.parse(text) as { results?: { name?: string; latitude?: number; longitude?: number; country_code?: string }[] }).results?.[0]
-    if (first === undefined || typeof first.latitude !== 'number' || typeof first.longitude !== 'number') return undefined
-    return { name: first.name ?? '', latitude: first.latitude, longitude: first.longitude, country: (first.country_code ?? '').toUpperCase() }
+    type Result = { name?: string; latitude?: number; longitude?: number; country_code?: string; timezone?: string }
+    const results = (JSON.parse(text) as { results?: Result[] }).results ?? []
+    const best = results.find(r => zone !== undefined && r.timezone === zone) ?? results[0]
+    if (best === undefined || typeof best.latitude !== 'number' || typeof best.longitude !== 'number') return undefined
+    return { name: best.name ?? '', latitude: best.latitude, longitude: best.longitude, country: (best.country_code ?? '').toUpperCase() }
   } catch {
     return undefined
   }

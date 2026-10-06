@@ -40,7 +40,7 @@
 
 - **Seasons**, from your local date: blossoms and drifting petals in spring, a red-and-gold forest and falling leaves in autumn, scarves on every Clawd in winter. South of the equator (once you set a city) the seasons turn over.
 - **Holidays**: lanterns for Lunar New Year, pumpkins and a witch's hat for Halloween, a tree and a Santa hat for Christmas.
-- **Real weather, if you want it**: `/clawd weather London` (or `台北`, `Москва`, `القاهرة`, any city in any script, or coordinates such as `51.51,-0.13`). It brings overcast skies, rain, thunderstorms with lightning, snow that settles on the ground, and fog. The house sees it through its window, and the space station has none. Temperatures show in °C, or °F in the US and the few other places that read Fahrenheit. It's off until you name a city; `/clawd weather off` turns it off again.
+- **Real weather, from the start**: Clawd follows the weather in the city your system time zone is named after (`Asia/Taipei` → Taipei, `America/New_York` → New York), so nothing looks up your IP. It brings overcast skies, rain, thunderstorms with lightning, snow that settles on the ground, and fog. The house sees it through its window, and the space station has none. Temperatures show in °C, or °F in the US and the few other places that read Fahrenheit. Name another city with `/clawd weather London` (or `台北`, `Москва`, `القاهرة`, any city in any script, or coordinates such as `51.51,-0.13`); `/clawd weather off` turns it off.
 
 **Hover everything.** In the Desktop app, a Clawd under the pointer hops and shows hearts, and his tooltip says what he's doing. The board lists your to-dos and the calendar names the deadline. Each scene's light switches on, and its toy says hi: the arcade, a crab peeking out of the sandcastle, or sparks from the campfire. In the terminal, the line under the house tells you what's under the pointer, and a click pets that Clawd.
 
@@ -81,7 +81,7 @@ Third-party marketplaces don't auto-update by default, and a marketplace can't s
 | --- | --- |
 | `/clawd` | Open the Clawd Sidekick pane: big Clawd, your full to-do list, all deadlines |
 | `/clawd scene house` · `beach` · `space` · `forest` · `next` | Move the Clawds to another scene |
-| `/clawd weather <city>` · `off` · `rain` | Follow a city's real weather, turn it off, or set one by hand (`clear`, `cloudy`, `rain`, `storm`, `snow`, `fog`) |
+| `/clawd weather <city>` · `auto` · `off` · `rain` | Follow another city's weather, go back to your time zone's city, turn it off, or set one by hand (`clear`, `cloudy`, `rain`, `storm`, `snow`, `fog`) |
 | `/clawd season winter` · `auto` | Set the season by hand, or follow the date |
 | `/clawd holiday christmas` · `lunar` · `halloween` · `none` · `auto` | Set the decorations by hand, or follow the date |
 | `/clawd hide` · `/clawd show` | Fold the band to one line, or unfold it |
@@ -98,16 +98,17 @@ These are in `/config`, under the plugin:
 | `autoTodo` | `true` | Note the to-dos Claude hands you |
 | `todoModel` | `haiku` | Model that reads a reply for to-dos |
 | `language` | `auto` | `auto`, `en` or `zh-TW` |
+| `weather` | `auto` | `auto` (the city your time zone is named after) or `off` (never goes online for weather) |
 
 ## What it does on your machine
 
 A mod runs with your permissions, so here is everything this one reaches (`claude plugin validate .` lists the same):
 
 - **Model calls**: only after a turn whose reply looks like it hands you something ("you'll need to…", "please upload…"), one short call to `todoModel`. Nothing else calls a model.
-- **Processes**: `date +%z` once at start, for your time zone; `defaults read -g AppleLanguages` once, on macOS, when the language is `auto` and no `LANG` is set.
+- **Processes**: `date +%z` and `readlink /etc/localtime` once at start, for your time zone; `defaults read -g AppleLanguages` once, on macOS, when the language is `auto` and no `LANG` is set.
 - **Storage**: your to-dos, deadlines, scene, language, weather city and pet count, in the plugin's own store on your machine.
-- **Environment**: reads `LANG`, `LC_ALL` and `LC_MESSAGES`.
-- **Network: none, unless you turn on weather.** Then `/clawd weather <city>` looks the city up once: it asks Open-Meteo's geocoder, then OpenStreetMap's Nominatim if Open-Meteo doesn't know the name, and sends only the text you typed. After that it fetches the forecast from `api.open-meteo.com` every 30 minutes, sending only the coordinates. Both services are free and need no key.
+- **Environment**: reads `LANG`, `LC_ALL`, `LC_MESSAGES`, `TZ` and `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`.
+- **Network: the weather, and nothing else.** At start Clawd turns your time zone into a city name and asks Open-Meteo's geocoder for it, once per time zone, sending only that name. Then it fetches the forecast from `api.open-meteo.com` every 30 minutes, sending only the coordinates. If you name a city Open-Meteo doesn't know, it asks OpenStreetMap's Nominatim once, sending only what you typed. There's no IP lookup, and both services are free and need no key. `/clawd weather off`, the `weather` setting or `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` keeps it all offline.
 
 ## How it works
 

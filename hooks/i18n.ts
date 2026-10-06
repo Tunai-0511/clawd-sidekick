@@ -163,6 +163,9 @@ export type Strings = {
   weatherNotFound: (city: string) => string
   weatherFailed: string
   weatherTurnedOff: string
+  weatherAutoNotice: (place: string, zone: string) => string
+  weatherAutoStatus: (place: string, zone: string, temperature: string, weather: string) => string
+  weatherNoZone: string
   seasonSet: (season: string) => string
   seasonAuto: (season: string) => string
   seasonUsage: string
@@ -325,13 +328,16 @@ const zh: Strings = {
   holidays: { none: '平常日', lunarNewYear: '農曆新年', halloween: '萬聖節', christmas: '聖誕節' },
   outsideWith: (outside, weather) => `${outside}・${weather}`,
   weatherLabel: '天氣',
-  weatherOff: '真實天氣沒開。打 /clawd weather 加城市名就會開始抓天氣，任何語言都行，例如 台北、Tokyo、São Paulo，也可以直接給經緯度。',
+  weatherOff: '真實天氣關著。/clawd weather auto 依系統時區自動判斷城市，或 /clawd weather 加城市名指定（任何語言都行，例如 台北、Tokyo、São Paulo，也可以給經緯度）。',
   weatherStatus: (place, temperature, weather) => `${place} ${temperature}，${weather}（每 30 分鐘更新一次，/clawd weather off 關掉）`,
   weatherSet: (place, temperature, weather) => `Clawd 們開始看 ${place} 的天氣了：${temperature}，${weather}。`,
   weatherManual: weather => `天氣固定成「${weather}」。打 /clawd weather 加城市名改看真實天氣，/clawd weather off 關掉。`,
   weatherNotFound: city => `找不到「${city}」。換個寫法試試，或直接給經緯度，例如 /clawd weather 25.03,121.56`,
   weatherFailed: '天氣服務暫時連不上，等一下再試。',
-  weatherTurnedOff: '真實天氣關掉了，Clawd 們只看時間和季節。',
+  weatherTurnedOff: '真實天氣關掉了，Clawd 們只看時間和季節。/clawd weather auto 可以再打開。',
+  weatherAutoNotice: (place, zone) => `Clawd 依你的系統時區（${zone}）看${place}的天氣。/clawd weather 城市 換城市，/clawd weather off 關掉。`,
+  weatherAutoStatus: (place, zone, temperature, weather) => `${place} ${temperature}，${weather}（依系統時區 ${zone} 自動判斷，每 30 分鐘更新；/clawd weather 城市 換城市）`,
+  weatherNoZone: '看不出你的系統時區對應哪個城市。打 /clawd weather 加城市名指定。',
   seasonSet: season => `季節固定成${season}。/clawd season auto 改回跟著日期。`,
   seasonAuto: season => `季節跟著日期走，現在是${season}。`,
   seasonUsage: '用法：/clawd season spring、summer、autumn、winter，或 auto 跟著日期',
@@ -494,13 +500,16 @@ const en: Strings = {
   holidays: { none: 'an ordinary day', lunarNewYear: 'Lunar New Year', halloween: 'Halloween', christmas: 'Christmas' },
   outsideWith: (outside, weather) => `${outside}, ${weather}`,
   weatherLabel: 'weather',
-  weatherOff: 'Real weather is off. /clawd weather and a city turns it on, in any language: London, 台北, São Paulo, or coordinates.',
+  weatherOff: 'Real weather is off. /clawd weather auto guesses your city from the system time zone, or /clawd weather and a city picks one, in any language: London, 台北, São Paulo, or coordinates.',
   weatherStatus: (place, temperature, weather) => `${place} ${temperature}, ${weather} (checked every 30 minutes; /clawd weather off turns it off)`,
   weatherSet: (place, temperature, weather) => `The Clawds now watch the weather in ${place}: ${temperature}, ${weather}.`,
   weatherManual: weather => `The weather is set to ${weather}. /clawd weather and a city follows the real weather; /clawd weather off turns it off.`,
   weatherNotFound: city => `Couldn't find "${city}". Try another spelling, or coordinates such as /clawd weather 51.51,-0.13`,
   weatherFailed: "The weather service isn't answering; try again in a bit.",
-  weatherTurnedOff: 'Real weather is off; the Clawds follow only the time and the season.',
+  weatherTurnedOff: 'Real weather is off; the Clawds follow only the time and the season. /clawd weather auto turns it back on.',
+  weatherAutoNotice: (place, zone) => `Clawd follows the weather in ${place}, from your system time zone (${zone}). /clawd weather <city> picks another city; /clawd weather off turns it off.`,
+  weatherAutoStatus: (place, zone, temperature, weather) => `${place} ${temperature}, ${weather} (from your time zone ${zone}, checked every 30 minutes; /clawd weather <city> picks another)`,
+  weatherNoZone: "Couldn't tell which city your system time zone is. /clawd weather and a city picks one.",
   seasonSet: season => `The season is set to ${season}. /clawd season auto follows the date again.`,
   seasonAuto: season => `The season follows the date: it's ${season}.`,
   seasonUsage: 'Usage: /clawd season spring, summer, autumn, winter, or auto to follow the date',

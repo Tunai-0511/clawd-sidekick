@@ -15,15 +15,18 @@ export type World = {
   replies: string[]
 }
 
-export function world(on: On, replies: string[] = [], stored: Readonly<Record<string, unknown>> = {}, system = 'zh-Hant-TW'): World {
+export type Extra = { zone?: string; env?: Readonly<Record<string, string>> }
+
+export function world(on: On, replies: string[] = [], stored: Readonly<Record<string, unknown>> = {}, system = 'zh-Hant-TW', extra: Extra = {}): World {
   const w: World = { clock: mock.clock(on, { now: NOW }), played: 0, toasts: [], opened: [], prompts: [], replies }
   mock.store(on, stored)
-  mock.env(on, { HOME: '/tmp/clawd-test' })
+  mock.env(on, { HOME: '/tmp/clawd-test', ...extra.env })
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.root', () => ({ value: '/Users/me/projects/my-app' }))
   on('process.run', (_$, e) => {
-    const stdout = e.argv[0] === '/bin/date' ? '+0800\n' : e.argv[0] === '/usr/bin/defaults' ? `(\n    "${system}"\n)\n` : ''
-    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    const zone = extra.zone === undefined ? '' : `/var/db/timezone/zoneinfo/${extra.zone}\n`
+    const stdout = e.argv[0] === '/bin/date' ? '+0800\n' : e.argv[0] === '/usr/bin/defaults' ? `(\n    "${system}"\n)\n` : e.argv[0] === 'readlink' ? zone : ''
+    return { value: { exitCode: stdout === '' ? 1 : 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
   on('audio.play', () => {

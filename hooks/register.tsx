@@ -32,6 +32,8 @@ import {
   seasonOf,
   usesFahrenheit,
   WEATHER_WORDS,
+  cityOfZone,
+  zoneOf,
   type Place,
 } from './weather'
 
@@ -54,6 +56,7 @@ const gameAtom = atom({ plugin: 'clawd-sidekick', key: 'game' } as const, 'pong'
 const langAtom = atom({ plugin: 'clawd-sidekick', key: 'lang' } as const, 'en')
 const themeAtom = atom({ plugin: 'clawd-sidekick', key: 'theme' } as const, 'house')
 const NO_WEATHER: WeatherState = { mode: 'off', weather: 'clear', temperature: null, isFahrenheit: false, checkedAt: 0 }
+const AUTO_WEATHER: WeatherState = { ...NO_WEATHER, mode: 'auto' }
 const weatherAtom = atom({ plugin: 'clawd-sidekick', key: 'weather' } as const, NO_WEATHER)
 const seasonPickAtom = atom({ plugin: 'clawd-sidekick', key: 'seasonPick' } as const, 'auto')
 const holidayPickAtom = atom({ plugin: 'clawd-sidekick', key: 'holidayPick' } as const, 'auto')
@@ -184,7 +187,7 @@ function chooseGame(now: number, offset: number): Game {
 
 // Module state: what a reload may forget.
 
-let settings = { isAutoTodo: true, todoModel: 'haiku', language: 'auto' }
+let settings = { isAutoTodo: true, todoModel: 'haiku', language: 'auto', weather: 'auto' }
 let lang: Lang = 'en'
 let isWorking = false
 let lastUsageAt = 0
@@ -324,7 +327,7 @@ async function load($: Engine): Promise<void> {
   const isCollapsed = await stored<boolean>('isCollapsed', false)
   const pets = await stored<number>('pets', 0)
   const theme = await stored<string>('theme', 'house')
-  const weather = await stored<WeatherState>('weather', NO_WEATHER)
+  const weather = await stored<WeatherState>('weather', settings.weather === 'off' ? NO_WEATHER : AUTO_WEATHER)
   const seasonPick = await stored<Season | 'auto'>('seasonPick', 'auto')
   const holidayPick = await stored<Holiday | 'auto'>('holidayPick', 'auto')
   await update($, weatherAtom, () => weather)
@@ -370,7 +373,7 @@ async function setWeather($: Engine, next: WeatherState): Promise<WeatherState> 
 /** The forecast for the chosen place, at most every thirty minutes unless forced. */
 async function refreshWeather($: Engine, isForced = false): Promise<WeatherState | undefined> {
   const current = await read($, weatherAtom)
-  if (current.mode !== 'city' || current.place === undefined) return undefined
+  if ((current.mode !== 'city' && current.mode !== 'auto') || current.place === undefined) return undefined
   const now = await $.clock.now()
   if (!isForced && now - current.checkedAt < 30 * 60_000) return current
   try {
@@ -398,6 +401,53 @@ async function findPlace($: Engine, text: string): Promise<Place | undefined> {
     const response = await $.http.fetch(nominatimPlaceUrl(text), { headers: { ...NOMINATIM_HEADERS } })
     const place = response.ok ? parseNominatimPlace(response.text) : undefined
     return place === undefined ? undefined : { ...place, name: text }
+  } catch {
+    return undefined
+  }
+}
+
+/** The system's IANA time zone: TZ, the /etc/localtime link, or Debian's /etc/timezone. */
+async function systemZone($: Engine): Promise<string | undefined> {
+  const tz = await $.env.get('TZ')
+  if (tz !== undefined && zoneOf(tz) !== undefined) return zoneOf(tz)
+  try {
+    const link = await $.process.run(['readlink', '/etc/localtime'], { timeoutMs: 3000 })
+    if (link.exitCode === 0 && zoneOf(link.stdout) !== undefined) return zoneOf(link.stdout)
+  } catch {
+    // No readlink here: try the file Debian keeps.
+  }
+  try {
+    return zoneOf(await $.fs.read('/etc/timezone'))
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The automatic city: the one the time zone is named after, looked up once
+ * per zone (again when the person travels or switches language). Off when
+ * the setting says so or Claude Code is told to keep non-essential traffic
+ * in; the first time it finds a city, it says so.
+ */
+async function autoLocate($: Engine, isForced = false): Promise<WeatherState | undefined> {
+  const current = await read($, weatherAtom)
+  if (current.mode !== 'auto' || settings.weather === 'off') return undefined
+  if ((await $.env.get('CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC')) !== undefined) return undefined
+  const zone = await systemZone($)
+  const city = zone === undefined ? undefined : cityOfZone(zone)
+  if (zone === undefined || city === undefined) return undefined
+  if (!isForced && current.zone === zone && current.place !== undefined) return refreshWeather($)
+  try {
+    const response = await $.http.fetch(openMeteoPlaceUrl(city, lang))
+    const place = response.ok ? parseOpenMeteoPlace(response.text, zone) : undefined
+    if (place === undefined) return undefined
+    await setWeather($, { ...AUTO_WEATHER, zone, place })
+    const fresh = await refreshWeather($, true)
+    if (fresh !== undefined && (await $.store.get('weatherNoticed')) === undefined) {
+      await $.store.set('weatherNoticed', true)
+      $.ui.toast(say(lang).weatherAutoNotice(place.name, zone), { timeoutMs: 10_000 })
+    }
+    return fresh
   } catch {
     return undefined
   }
@@ -524,6 +574,7 @@ async function setLang($: Engine, choice: 'zh' | 'en' | 'auto'): Promise<Lang> {
   await $.store.set('lang', choice)
   lang = await chooseLang($)
   await update($, langAtom, () => lang)
+  void autoLocate($, true)
   const next = await settle($)
   await act($, next.pose, next.label)
   return lang
@@ -534,6 +585,7 @@ export const register: Register = (on, options) => {
     isAutoTodo: options.autoTodo !== false,
     todoModel: typeof options.todoModel === 'string' && options.todoModel !== '' ? options.todoModel : 'haiku',
     language: typeof options.language === 'string' ? options.language : 'auto',
+    weather: options.weather === 'off' ? 'off' : 'auto',
   }
 
   // ── Drawing ─────────────────────────────────────────────────────────────
@@ -652,7 +704,7 @@ export const register: Register = (on, options) => {
           <Text color={ORANGE} bold wrap="truncate-end">
             {`「${doing.label || (isWorking ? w.thinking : w.hello)}」`}
           </Text>
-          {sky.mode === 'city' && sky.place !== undefined && sky.temperature !== null
+          {(sky.mode === 'city' || sky.mode === 'auto') && sky.place !== undefined && sky.temperature !== null
             ? stat(sky.place.name, `${degrees(sky)} ${w.weathers[sky.weather]}`)
             : sky.mode === 'manual'
               ? stat(w.weatherLabel, w.weathers[sky.weather])
@@ -811,6 +863,7 @@ export const register: Register = (on, options) => {
     await act($, 'idle', '')
     $.clock.every(5_000, () => void tickClock($))
     void checkClock($)
+    void autoLocate($)
     void refreshUsage($, true)
     const w = say(lang)
     for (const command of [
@@ -854,7 +907,15 @@ export const register: Register = (on, options) => {
         if (current.mode === 'off') return { text: words.weatherOff }
         if (current.mode === 'manual') return { text: words.weatherManual(words.weathers[current.weather]) }
         const fresh = (await refreshWeather($)) ?? current
-        return { text: words.weatherStatus(fresh.place?.name ?? '', degrees(fresh), words.weathers[fresh.weather]) }
+        if (fresh.place === undefined) return { text: words.weatherNoZone }
+        if (fresh.mode === 'auto') return { text: words.weatherAutoStatus(fresh.place.name, fresh.zone ?? '', degrees(fresh), words.weathers[fresh.weather]) }
+        return { text: words.weatherStatus(fresh.place.name, degrees(fresh), words.weathers[fresh.weather]) }
+      }
+      if (rest.toLowerCase() === 'auto') {
+        await setWeather($, AUTO_WEATHER)
+        const fresh = await autoLocate($, true)
+        if (fresh?.place === undefined) return { text: settings.weather === 'off' ? words.weatherOff : words.weatherNoZone }
+        return { text: words.weatherAutoStatus(fresh.place.name, fresh.zone ?? '', degrees(fresh), words.weathers[fresh.weather]) }
       }
       if (rest.toLowerCase() === 'off') {
         await setWeather($, NO_WEATHER)

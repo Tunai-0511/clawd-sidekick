@@ -79,9 +79,11 @@ export type Season = 'spring' | 'summer' | 'autumn' | 'winter'
 
 export type Holiday = 'none' | 'lunarNewYear' | 'halloween' | 'christmas'
 
-/** Where the weather comes from: nowhere, a city's forecast, or a word typed by hand. */
+/** Where the weather comes from: nowhere, the time zone's city, a city named, or a word typed by hand. */
 export type WeatherState = {
-  mode: 'off' | 'city' | 'manual'
+  mode: 'off' | 'auto' | 'city' | 'manual'
+  /** The system time zone the automatic city came from. */
+  zone?: string
   place?: { name: string; latitude: number; longitude: number; country: string }
   weather: Weather
   temperature: number | null

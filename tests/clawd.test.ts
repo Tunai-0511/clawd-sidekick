@@ -6,7 +6,7 @@ import { hitTest, layoutFor, SPOT_X, tipOf } from '../hooks/scene'
 import { sceneSvg } from '../hooks/scene-svg'
 import { CYCLE, frame, H, POSES, W } from '../hooks/sprite'
 import { isDuplicate, parseList, shouldExtract } from '../hooks/todo'
-import { forecastUrl, holidayOf, parseNominatimPlace, placeOfCoordinates, seasonOf, usesFahrenheit, weatherOfCode } from '../hooks/weather'
+import { cityOfZone, forecastUrl, holidayOf, parseNominatimPlace, parseOpenMeteoPlace, placeOfCoordinates, seasonOf, usesFahrenheit, weatherOfCode, zoneOf } from '../hooks/weather'
 import { BAND, NOW, SURFACES, world } from './world'
 
 const TAIPEI = 480
@@ -151,6 +151,21 @@ describe('the sky, the season and the holidays', () => {
     expect(usesFahrenheit('US')).toBe(true)
     expect(usesFahrenheit('TW')).toBe(false)
     expect(forecastUrl({ name: 'NYC', latitude: 40.7, longitude: -74, country: 'US' })).toContain('temperature_unit=fahrenheit')
+  })
+
+  test('the city behind a time zone, in any part of the world', async () => {
+    expect(zoneOf('/var/db/timezone/zoneinfo/Asia/Taipei\n')).toBe('Asia/Taipei')
+    expect(zoneOf('/usr/share/zoneinfo/America/Argentina/Buenos_Aires')).toBe('America/Argentina/Buenos_Aires')
+    expect(zoneOf(':Europe/Paris')).toBe('Europe/Paris')
+    expect(zoneOf('UTC')).toBeUndefined()
+    expect(cityOfZone('America/Argentina/Buenos_Aires')).toBe('Buenos Aires')
+    expect(cityOfZone('Asia/Ho_Chi_Minh')).toBe('Ho Chi Minh')
+    expect(cityOfZone('Etc/GMT+8')).toBeUndefined()
+    const paris = parseOpenMeteoPlace(
+      '{"results":[{"name":"Paris","latitude":33.66,"longitude":-95.55,"country_code":"US","timezone":"America/Chicago"},{"name":"Paris","latitude":48.85,"longitude":2.35,"country_code":"FR","timezone":"Europe/Paris"}]}',
+      'Europe/Paris',
+    )
+    expect(paris?.country).toBe('FR')
   })
 
   test('weather falls only where it can be seen, and every kind stays inside the size limit', async () => {
@@ -373,5 +388,46 @@ describe('the band above the prompt', () => {
     expect((await run('weather 下雪')).text).toContain('下雪')
     expect((await run('holiday auto')).text).toContain('平常日')
     expect((await run('season nope')).text).toContain('用法')
+  })
+
+  const forecastFor = (asked: string[]) => (_$: unknown, e: { url: string }) => {
+    asked.push(e.url)
+    const text = e.url.includes('geocoding-api')
+      ? '{"results":[{"name":"台北市","latitude":25.05,"longitude":121.53,"country_code":"TW","timezone":"Asia/Taipei"}]}'
+      : '{"current":{"weather_code":3,"temperature_2m":23.4}}'
+    return { value: { status: 200, ok: true, headers: {}, text } }
+  }
+
+  test('real weather is on from the start, for the city the time zone is named after', async ($, on) => {
+    const w = world(on, [], {}, 'zh-Hant-TW', { zone: 'Asia/Taipei' })
+    const asked: string[] = []
+    on('http.fetch', forecastFor(asked))
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    await w.clock.settle()
+    expect(asked[0]).toContain('name=Taipei')
+    expect(asked[0]).toContain('language=zh')
+    expect(asked.some(url => url.includes('nominatim'))).toBe(false)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    expect(await ui.find({ text: /台北市/ })).toBeDefined()
+    expect(await ui.find({ text: /23°C 多雲/ })).toBeDefined()
+    expect(w.toasts.filter(t => t.includes('Asia/Taipei'))).toHaveLength(1)
+  })
+
+  test('no weather goes online when the setting is off or Claude Code keeps non-essential traffic in', async ($, on) => {
+    const asked: string[] = []
+    const w = world(on, [], {}, 'zh-Hant-TW', { zone: 'Asia/Taipei', env: { CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' } })
+    on('http.fetch', forecastFor(asked))
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    await w.clock.settle()
+    expect(asked).toHaveLength(0)
+  })
+
+  test('the weather setting turned off keeps it off', { options: { weather: 'off' } }, async ($, on) => {
+    const asked: string[] = []
+    const w = world(on, [], {}, 'zh-Hant-TW', { zone: 'Asia/Taipei' })
+    on('http.fetch', forecastFor(asked))
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    await w.clock.settle()
+    expect(asked).toHaveLength(0)
   })
 })
