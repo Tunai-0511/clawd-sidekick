@@ -1,8 +1,8 @@
 {
   "name": "clawd-sidekick",
   "displayName": "Clawd Sidekick",
-  "version": "0.7.0",
-  "description": "Clawd's pixel world above your prompt, in four scenes that follow your local time, season and holidays, and the real weather if you name a city: Clawd walks to the zone of whatever Claude is doing while his crew plays. A Clawd spinner, live usage figures, the to-dos Claude hands you, and a deadline radar. English and 繁體中文.",
+  "version": "0.8.0",
+  "description": "Clawd's pixel world above your prompt, in four scenes that follow your local time, season and holidays: Clawd walks to the zone of whatever Claude is doing while his crew plays. A Clawd spinner, live usage figures, the to-dos Claude hands you, and a deadline radar. English and 繁體中文.",
   "author": {
     "name": "Tunai"
   },
@@ -16,7 +16,6 @@
     "status",
     "todo",
     "deadline",
-    "weather",
     "i18n"
   ],
   "types": "./types/index.d.ts",
@@ -41,16 +40,6 @@
         "auto",
         "en",
         "zh-TW"
-      ],
-      "default": "auto"
-    },
-    "weather": {
-      "type": "string",
-      "title": "Real weather / 真實天氣",
-      "description": "auto: the city your system time zone is named after (no IP lookup); off: never goes online for weather",
-      "options": [
-        "auto",
-        "off"
       ],
       "default": "auto"
     }

@@ -125,20 +125,16 @@ function spinner(g: Grid, x: number, y: number, t: number, colors: (column: numb
 
 const STARS: readonly (readonly [number, number])[] = Array.from({ length: 24 }, (_, i) => [hash(i * 7 + 3) % SW, 1 + (hash(i * 13 + 5) % 11)] as const)
 
-/** The sky's three bands, top to bottom, by time of day and weather. */
+/** The sky's three bands, top to bottom, by time of day. */
 function skyBands(s: SceneProps): readonly number[] {
-  const isGray = s.weather !== 'clear'
-  if (s.time === 'night') return isGray ? [C.nightTop, C.nightCloud, C.nightCloud] : [C.nightTop, C.night, C.nightLow]
-  if (s.weather === 'storm') return [C.stormTop, C.storm, C.stormLow]
-  if (isGray) return [C.overcastTop, C.overcast, C.overcastLow]
+  if (s.time === 'night') return [C.nightTop, C.night, C.nightLow]
   return s.time === 'dusk' ? [C.duskTop, C.duskMid, C.duskLow] : [C.skyTop, C.sky, C.skyLow]
 }
 
-/** An open sky by the person's time of day and weather: bands, then sun or moon and stars when it is clear. */
+/** An open sky by the person's time of day: bands, then the sun, or the moon and stars. */
 function outdoorSky(g: Grid, t: number, s: SceneProps, bottom: number, sunX: number): void {
   const third = Math.ceil(bottom / 3)
   skyBands(s).forEach((color, i) => rect(g, 0, i * third, SW, Math.min(third, bottom - i * third), color))
-  if (s.weather !== 'clear') return
   if (s.time === 'night') {
     STARS.forEach(([x, y], i) => {
       if (y < bottom - 2 && hash(i * 11 + (Math.floor(t / 3) % 8)) % 3 !== 0) px(g, x, y, C.white)
@@ -156,7 +152,7 @@ function outdoorSky(g: Grid, t: number, s: SceneProps, bottom: number, sunX: num
 
 /** Clouds drawn into the sky, for the terminal (the SVG moves its own). */
 function driftingClouds(g: Grid, t: number, s: SceneProps, rows: readonly number[]): void {
-  if (s.time === 'night' || (s.weather !== 'clear' && s.weather !== 'cloudy')) return
+  if (s.time === 'night') return
   rows.forEach((y, i) => {
     const x = ((Math.floor(t / 4) + i * 97) % 300) - 20
     rect(g, x, y, 7, 1, C.white)
@@ -245,9 +241,7 @@ function house(g: Grid, t: number, s: SceneProps, o: { hasClouds: boolean; isPla
   terminalBox(g, t, C.beige)
   // Lookout
   rect(g, 140, 5, 28, 11, C.wood)
-  if (s.weather !== 'clear') {
-    skyBands(s).forEach((color, i) => rect(g, 141, 6 + i * 3, 26, 3, color))
-  } else if (s.time === 'night') {
+  if (s.time === 'night') {
     rect(g, 141, 6, 26, 9, C.night)
     rect(g, 162, 7, 3, 3, C.moon)
     px(g, 162, 7, C.night)
@@ -265,7 +259,7 @@ function house(g: Grid, t: number, s: SceneProps, o: { hasClouds: boolean; isPla
     rect(g, 141, 6, 26, 9, C.sky)
     rect(g, 163, 7, 3, 3, C.yellow)
   }
-  if (o.hasClouds && s.time !== 'night' && s.weather === 'clear') {
+  if (o.hasClouds && s.time !== 'night') {
     for (const [phase, y] of [
       [0, 8],
       [13, 11],
@@ -298,7 +292,7 @@ function beach(g: Grid, t: number, s: SceneProps, o: { hasClouds: boolean; isPla
   rect(g, 158, 2, 6, 1, C.red)
   rect(g, 160, 1, 2, 1, C.red)
   // The sea, its waves, the shore
-  const sea = s.time === 'night' ? C.seaNight : s.weather !== 'clear' ? C.seaGray : s.time === 'dusk' ? C.seaDusk : C.sea
+  const sea = s.time === 'night' ? C.seaNight : s.time === 'dusk' ? C.seaDusk : C.sea
   rect(g, 0, 15, SW, 5, sea)
   rect(g, 0, 15, SW, 1, s.time === 'night' ? C.nightLow : C.seaDeep)
   for (let i = 0; i < 8; i++) rect(g, i * 32 + (Math.floor(t / 2) % 8) * 4, 16 + (i % 2) * 2, 3, 1, C.foam)
@@ -465,10 +459,6 @@ function pine(g: Grid, x: number, top: number, bottom: number, color: number, s:
     const half = Math.floor((y - top) / 2)
     rect(g, x - half, y, half * 2 + 1, 1, color)
     if (s.season === 'spring' && y > top + 1 && hash(x * 31 + y) % 4 === 0) px(g, x - half + (hash(y + x) % (half * 2 + 1)), y, C.blossom)
-  }
-  if (s.weather === 'snow') {
-    px(g, x, top, C.snow)
-    rect(g, x - 1, top + 2, 3, 1, C.snow)
   }
 }
 

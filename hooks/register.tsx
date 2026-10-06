@@ -10,7 +10,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement } from 'claude-code'
 
-import type { Activity, Deadline, Doing, Game, Holiday, Pose, SceneActor, SceneProps, Season, Theme, TimeOfDay, Todo, Usage, WeatherState } from '../types'
+import type { Activity, Deadline, Doing, Game, Holiday, Pose, SceneActor, SceneProps, Season, Theme, TimeOfDay, Todo, Usage } from '../types'
 import { countdown, formatDue, parseDeadline, parseOffset, urgency, URGENCY_COLOR } from './deadline'
 import { langOf, say, type Lang } from './i18n'
 import { actorX, layoutFor, ROOMS, SH, SPOT_X, SW, type Spot } from './scene'
@@ -18,24 +18,8 @@ import { miniClawdSvg, sceneSvg } from './scene-svg'
 import { H, W } from './sprite'
 import { THEME_ORDER } from './themes'
 import { clawdSvg } from './svg'
+import { holidayOf, seasonOf, zoneOf } from './seasons'
 import { extractPrompt, isDuplicate, newId, ordered, parseList, shouldExtract } from './todo'
-import {
-  forecastUrl,
-  holidayOf,
-  NOMINATIM_HEADERS,
-  nominatimPlaceUrl,
-  openMeteoPlaceUrl,
-  parseForecast,
-  parseNominatimPlace,
-  parseOpenMeteoPlace,
-  placeOfCoordinates,
-  seasonOf,
-  usesFahrenheit,
-  WEATHER_WORDS,
-  cityOfZone,
-  zoneOf,
-  type Place,
-} from './weather'
 
 type Engine = EngineInterface
 
@@ -55,9 +39,7 @@ const projectAtom = atom({ plugin: 'clawd-sidekick', key: 'project' } as const, 
 const gameAtom = atom({ plugin: 'clawd-sidekick', key: 'game' } as const, 'pong')
 const langAtom = atom({ plugin: 'clawd-sidekick', key: 'lang' } as const, 'en')
 const themeAtom = atom({ plugin: 'clawd-sidekick', key: 'theme' } as const, 'house')
-const NO_WEATHER: WeatherState = { mode: 'off', weather: 'clear', temperature: null, isFahrenheit: false, checkedAt: 0 }
-const AUTO_WEATHER: WeatherState = { ...NO_WEATHER, mode: 'auto' }
-const weatherAtom = atom({ plugin: 'clawd-sidekick', key: 'weather' } as const, NO_WEATHER)
+const zoneAtom = atom({ plugin: 'clawd-sidekick', key: 'zone' } as const, '')
 const seasonPickAtom = atom({ plugin: 'clawd-sidekick', key: 'seasonPick' } as const, 'auto')
 const holidayPickAtom = atom({ plugin: 'clawd-sidekick', key: 'holidayPick' } as const, 'auto')
 
@@ -187,7 +169,7 @@ function chooseGame(now: number, offset: number): Game {
 
 // Module state: what a reload may forget.
 
-let settings = { isAutoTodo: true, todoModel: 'haiku', language: 'auto', weather: 'auto' }
+let settings = { isAutoTodo: true, todoModel: 'haiku', language: 'auto' }
 let lang: Lang = 'en'
 let isWorking = false
 let lastUsageAt = 0
@@ -327,10 +309,8 @@ async function load($: Engine): Promise<void> {
   const isCollapsed = await stored<boolean>('isCollapsed', false)
   const pets = await stored<number>('pets', 0)
   const theme = await stored<string>('theme', 'house')
-  const weather = await stored<WeatherState>('weather', settings.weather === 'off' ? NO_WEATHER : AUTO_WEATHER)
   const seasonPick = await stored<Season | 'auto'>('seasonPick', 'auto')
   const holidayPick = await stored<Holiday | 'auto'>('holidayPick', 'auto')
-  await update($, weatherAtom, () => weather)
   await update($, seasonPickAtom, () => seasonPick)
   await update($, holidayPickAtom, () => holidayPick)
   await update($, themeAtom, (): Theme => (THEME_ORDER as readonly string[]).includes(theme) ? (theme as Theme) : 'house')
@@ -362,49 +342,7 @@ async function setCollapsed($: Engine, isCollapsed: boolean): Promise<void> {
   await update($, collapsedAtom, () => isCollapsed)
 }
 
-// ── Weather: off until a city is named ──────────────────────────────────
-
-async function setWeather($: Engine, next: WeatherState): Promise<WeatherState> {
-  await $.store.set('weather', next)
-  await update($, weatherAtom, () => next)
-  return next
-}
-
-/** The forecast for the chosen place, at most every thirty minutes unless forced. */
-async function refreshWeather($: Engine, isForced = false): Promise<WeatherState | undefined> {
-  const current = await read($, weatherAtom)
-  if ((current.mode !== 'city' && current.mode !== 'auto') || current.place === undefined) return undefined
-  const now = await $.clock.now()
-  if (!isForced && now - current.checkedAt < 30 * 60_000) return current
-  try {
-    const response = await $.http.fetch(forecastUrl(current.place))
-    const forecast = response.ok ? parseForecast(response.text) : undefined
-    if (forecast === undefined) return undefined
-    return await setWeather($, { ...current, ...forecast, isFahrenheit: usesFahrenheit(current.place.country), checkedAt: now })
-  } catch {
-    return undefined
-  }
-}
-
-/** Any city in any script: coordinates as given, Open-Meteo's geocoder, then OpenStreetMap's. */
-async function findPlace($: Engine, text: string): Promise<Place | undefined> {
-  const coordinates = placeOfCoordinates(text)
-  if (coordinates !== undefined) return coordinates
-  try {
-    const response = await $.http.fetch(openMeteoPlaceUrl(text))
-    const place = response.ok ? parseOpenMeteoPlace(response.text) : undefined
-    if (place !== undefined) return { ...place, name: text }
-  } catch {
-    // Try the next geocoder.
-  }
-  try {
-    const response = await $.http.fetch(nominatimPlaceUrl(text), { headers: { ...NOMINATIM_HEADERS } })
-    const place = response.ok ? parseNominatimPlace(response.text) : undefined
-    return place === undefined ? undefined : { ...place, name: text }
-  } catch {
-    return undefined
-  }
-}
+// ── Where on Earth: the time zone, for which way the seasons run ─────────
 
 /** The system's IANA time zone: TZ, the /etc/localtime link, or Debian's /etc/timezone. */
 async function systemZone($: Engine): Promise<string | undefined> {
@@ -422,38 +360,6 @@ async function systemZone($: Engine): Promise<string | undefined> {
     return undefined
   }
 }
-
-/**
- * The automatic city: the one the time zone is named after, looked up once
- * per zone (again when the person travels or switches language). Off when
- * the setting says so or Claude Code is told to keep non-essential traffic
- * in; the first time it finds a city, it says so.
- */
-async function autoLocate($: Engine, isForced = false): Promise<WeatherState | undefined> {
-  const current = await read($, weatherAtom)
-  if (current.mode !== 'auto' || settings.weather === 'off') return undefined
-  if ((await $.env.get('CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC')) !== undefined) return undefined
-  const zone = await systemZone($)
-  const city = zone === undefined ? undefined : cityOfZone(zone)
-  if (zone === undefined || city === undefined) return undefined
-  if (!isForced && current.zone === zone && current.place !== undefined) return refreshWeather($)
-  try {
-    const response = await $.http.fetch(openMeteoPlaceUrl(city, lang))
-    const place = response.ok ? parseOpenMeteoPlace(response.text, zone) : undefined
-    if (place === undefined) return undefined
-    await setWeather($, { ...AUTO_WEATHER, zone, place })
-    const fresh = await refreshWeather($, true)
-    if (fresh !== undefined && (await $.store.get('weatherNoticed')) === undefined) {
-      await $.store.set('weatherNoticed', true)
-      $.ui.toast(say(lang).weatherAutoNotice(place.name, zone), { timeoutMs: 10_000 })
-    }
-    return fresh
-  } catch {
-    return undefined
-  }
-}
-
-const degrees = (w: WeatherState): string => (w.temperature === null ? '' : `${w.temperature}°${w.isFahrenheit ? 'F' : 'C'}`)
 
 /** Moves the Clawds to another scene; `next` takes the one after the current. */
 async function setTheme($: Engine, choice: Theme | 'next'): Promise<Theme> {
@@ -510,7 +416,6 @@ async function checkClock($: Engine): Promise<void> {
   const now = await $.clock.now()
   await update($, nowAtom, () => now)
   await arrangeCrew($)
-  await refreshWeather($)
   const deadlines = await read($, deadlinesAtom)
   const due = deadlines.find(d => !d.hasAlarmed && urgency(d.due, now) === 'urgent')
   if (due !== undefined) {
@@ -574,7 +479,6 @@ async function setLang($: Engine, choice: 'zh' | 'en' | 'auto'): Promise<Lang> {
   await $.store.set('lang', choice)
   lang = await chooseLang($)
   await update($, langAtom, () => lang)
-  void autoLocate($, true)
   const next = await settle($)
   await act($, next.pose, next.label)
   return lang
@@ -585,7 +489,6 @@ export const register: Register = (on, options) => {
     isAutoTodo: options.autoTodo !== false,
     todoModel: typeof options.todoModel === 'string' && options.todoModel !== '' ? options.todoModel : 'haiku',
     language: typeof options.language === 'string' ? options.language : 'auto',
-    weather: options.weather === 'off' ? 'off' : 'auto',
   }
 
   // ── Drawing ─────────────────────────────────────────────────────────────
@@ -598,7 +501,7 @@ export const register: Register = (on, options) => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
-    const [doing, todos, deadlines, isCollapsed, project, actors, usage, game, offset, talk, theme, sky, seasonPick, holidayPick] = await Promise.all([
+    const [doing, todos, deadlines, isCollapsed, project, actors, usage, game, offset, talk, theme, zone, seasonPick, holidayPick] = await Promise.all([
       read($, activity),
       read($, todosAtom),
       read($, deadlinesAtom),
@@ -610,7 +513,7 @@ export const register: Register = (on, options) => {
       read($, offsetAtom),
       read($, langAtom),
       read($, themeAtom),
-      read($, weatherAtom),
+      read($, zoneAtom),
       read($, seasonPickAtom),
       read($, holidayPickAtom),
       read($, nowAtom),
@@ -660,8 +563,7 @@ export const register: Register = (on, options) => {
       deadline: nearest === undefined ? '' : `${nearest.title} · ${formatDue(nearest.due, offset)} · ${countdown(nearest.due, now, talk)}`,
       lang: talk,
       theme,
-      weather: sky.mode === 'off' ? 'clear' : sky.weather,
-      season: seasonPick !== 'auto' ? seasonPick : seasonOf(now, offset, sky.place?.latitude ?? null),
+      season: seasonPick !== 'auto' ? seasonPick : seasonOf(now, offset, zone),
       holiday: holidayPick !== 'auto' ? holidayPick : holidayOf(now, offset),
     }
     let house: RenderElement
@@ -704,11 +606,6 @@ export const register: Register = (on, options) => {
           <Text color={ORANGE} bold wrap="truncate-end">
             {`「${doing.label || (isWorking ? w.thinking : w.hello)}」`}
           </Text>
-          {(sky.mode === 'city' || sky.mode === 'auto') && sky.place !== undefined && sky.temperature !== null
-            ? stat(sky.place.name, `${degrees(sky)} ${w.weathers[sky.weather]}`)
-            : sky.mode === 'manual'
-              ? stat(w.weatherLabel, w.weathers[sky.weather])
-              : null}
           {usage.model ? <Text dimColor>{usage.model}</Text> : null}
           {usage.contextPercent === null ? null : stat('ctx', `${bar(usage.contextPercent)} ${Math.round(usage.contextPercent)}%`, level(usage.contextPercent))}
           {usage.fiveHour === null ? null : stat('5h', `${Math.round(usage.fiveHour)}%`, level(usage.fiveHour))}
@@ -863,7 +760,7 @@ export const register: Register = (on, options) => {
     await act($, 'idle', '')
     $.clock.every(5_000, () => void tickClock($))
     void checkClock($)
-    void autoLocate($)
+    void systemZone($).then(found => update($, zoneAtom, () => found ?? ''))
     void refreshUsage($, true)
     const w = say(lang)
     for (const command of [
@@ -899,40 +796,6 @@ export const register: Register = (on, options) => {
       const theme = await setTheme($, pick)
       return { text: say(lang).sceneSet(say(lang).themes[theme]) }
     }
-    if (arg === 'weather') {
-      const words = say(lang)
-      const rest = e.args.trim().slice(arg.length).trim()
-      const current = await read($, weatherAtom)
-      if (rest === '') {
-        if (current.mode === 'off') return { text: words.weatherOff }
-        if (current.mode === 'manual') return { text: words.weatherManual(words.weathers[current.weather]) }
-        const fresh = (await refreshWeather($)) ?? current
-        if (fresh.place === undefined) return { text: words.weatherNoZone }
-        if (fresh.mode === 'auto') return { text: words.weatherAutoStatus(fresh.place.name, fresh.zone ?? '', degrees(fresh), words.weathers[fresh.weather]) }
-        return { text: words.weatherStatus(fresh.place.name, degrees(fresh), words.weathers[fresh.weather]) }
-      }
-      if (rest.toLowerCase() === 'auto') {
-        await setWeather($, AUTO_WEATHER)
-        const fresh = await autoLocate($, true)
-        if (fresh?.place === undefined) return { text: settings.weather === 'off' ? words.weatherOff : words.weatherNoZone }
-        return { text: words.weatherAutoStatus(fresh.place.name, fresh.zone ?? '', degrees(fresh), words.weathers[fresh.weather]) }
-      }
-      if (rest.toLowerCase() === 'off') {
-        await setWeather($, NO_WEATHER)
-        return { text: words.weatherTurnedOff }
-      }
-      const manual = WEATHER_WORDS[rest.toLowerCase()]
-      if (manual !== undefined) {
-        await setWeather($, { ...NO_WEATHER, mode: 'manual', weather: manual })
-        return { text: words.weatherManual(words.weathers[manual]) }
-      }
-      const place = await findPlace($, rest)
-      if (place === undefined) return { text: words.weatherNotFound(rest) }
-      await setWeather($, { ...NO_WEATHER, mode: 'city', place })
-      const fresh = await refreshWeather($, true)
-      if (fresh === undefined) return { text: words.weatherFailed }
-      return { text: words.weatherSet(place.name, degrees(fresh), words.weathers[fresh.weather]) }
-    }
     if (arg === 'season') {
       const words = say(lang)
       const pick = choice.toLowerCase()
@@ -940,8 +803,7 @@ export const register: Register = (on, options) => {
       if (pick === 'auto' || pick === '') {
         await $.store.set('seasonPick', 'auto')
         await update($, seasonPickAtom, (): Season | 'auto' => 'auto')
-        const sky = await read($, weatherAtom)
-        return { text: words.seasonAuto(words.seasons[seasonOf(await $.clock.now(), await read($, offsetAtom), sky.place?.latitude ?? null)]) }
+        return { text: words.seasonAuto(words.seasons[seasonOf(await $.clock.now(), await read($, offsetAtom), await read($, zoneAtom))]) }
       }
       const season = seasons.find(one => one === pick || (pick === 'fall' && one === 'autumn'))
       if (season === undefined) return { text: words.seasonUsage }

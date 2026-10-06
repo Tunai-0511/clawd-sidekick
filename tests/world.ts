@@ -15,12 +15,12 @@ export type World = {
   replies: string[]
 }
 
-export type Extra = { zone?: string; env?: Readonly<Record<string, string>> }
+export type Extra = { zone?: string }
 
 export function world(on: On, replies: string[] = [], stored: Readonly<Record<string, unknown>> = {}, system = 'zh-Hant-TW', extra: Extra = {}): World {
   const w: World = { clock: mock.clock(on, { now: NOW }), played: 0, toasts: [], opened: [], prompts: [], replies }
   mock.store(on, stored)
-  mock.env(on, { HOME: '/tmp/clawd-test', ...extra.env })
+  mock.env(on, { HOME: '/tmp/clawd-test' })
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.root', () => ({ value: '/Users/me/projects/my-app' }))
   on('process.run', (_$, e) => {

@@ -476,10 +476,10 @@ export function drawClawd(g: Grid, x: number, t: number, doing: Doing | 'walk', 
 /** A deadline under three days away makes the main Clawd sweat. */
 export const isNervous = (s: SceneProps): boolean => s.urgency === 'near' || s.urgency === 'urgent'
 
-/** What the date has the Clawds wear: scarves in winter or snow, a hat for the main Clawd on holidays. */
+/** What the date has the Clawds wear: scarves in winter, a hat for the main Clawd on holidays. */
 export function outfitOf(a: SceneActor, s: SceneProps): Mod {
   const hat = a.cap !== null ? undefined : s.holiday === 'christmas' ? 'santa' : s.holiday === 'halloween' ? 'witch' : undefined
-  return { hasScarf: s.season === 'winter' || s.weather === 'snow', ...(hat === undefined ? {} : { hat }) }
+  return { hasScarf: s.season === 'winter', ...(hat === undefined ? {} : { hat }) }
 }
 
 function drawProps(g: Grid, x: number, y: number, k: number, doing: Doing | 'walk'): void {

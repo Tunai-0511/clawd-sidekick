@@ -6,7 +6,7 @@
 // Clawd, the board and the calendar carry a tooltip. `color-scheme` on the
 // root keeps the surface's frame transparent.
 
-import { decorate, decorParts, weatherSvg } from './decor'
+import { decorate, decorParts, fallingSvg } from './decor'
 import { say } from './i18n'
 import { THEMES } from './themes'
 import {
@@ -144,7 +144,7 @@ function covers(s: SceneProps, play: Play, now: number): string {
 /** Clouds drift on their own: across the house's window, or the whole sky outdoors. */
 function clouds(s: SceneProps): string {
   const sky = THEMES[s.theme].sky
-  if (sky === null || s.time === 'night' || (s.weather !== 'clear' && s.weather !== 'cloudy')) return ''
+  if (sky === null || s.time === 'night') return ''
   const fill = s.time === 'dusk' ? '#FBD3C0' : '#FFFFFF'
   if (s.theme === 'house') {
     return (
@@ -261,7 +261,7 @@ function hovers(s: SceneProps): string {
     `<g class="spot">${rectOf(CALENDAR, 'class="glass"')}${ring(CALENDAR)}<title>${escape(calendar)}</title></g>` +
     `<g class="spot">${rectOf(art.light.box, 'class="glass"')}${art.light.glow}<title>${escape(words.lights[s.theme])}</title></g>` +
     `<g class="spot">${rectOf(art.toy.box, 'class="glass"')}${art.toy.hi}<title>${escape(words.toys[s.theme])}</title></g>` +
-    `<g class="spot">${rectOf({ x: 140, y: 5, w: 28, h: 11 }, 'class="glass"')}<title>${escape(s.theme === 'space' ? words.outsideSpace : s.weather === 'clear' ? words.outside[s.time] : words.outsideWith(words.outside[s.time], words.weathers[s.weather]))}</title></g>`
+    `<g class="spot">${rectOf({ x: 140, y: 5, w: 28, h: 11 }, 'class="glass"')}<title>${escape(s.theme === 'space' ? words.outsideSpace : words.outside[s.time])}</title></g>`
   )
 }
 
@@ -291,7 +291,7 @@ export function sceneSvg(s: SceneProps, now: number): string {
     hovers(s) +
     order.map(({ a, i }) => actor(a, i, s, now, play)).join('') +
     covers(s, play, now) +
-    weatherSvg(s) +
+    fallingSvg(s) +
     '</svg>'
   )
 }
