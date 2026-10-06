@@ -100,9 +100,13 @@
 
 ![Spring blossoms in the forest camp, its autumn reds and golds, Halloween pumpkins on the beach at dusk, Christmas night in the house with scarves and a Santa hat](./docs/seasons.png)
 
-**Hover everything.** In the Desktop app, a Clawd under the pointer hops and shows hearts, and his tooltip says what he's doing. The board lists your deadlines and the calendar names the nearest. Each scene's light switches on, and its toy says hi: the arcade, a crab peeking out of the sandcastle, or sparks from the campfire. In the terminal, the line under the house tells you what's under the pointer, and a click pets that Clawd.
+**Light and air.** In the Desktop app every room is lit by its own lamps and screens: soft pools of light, a glow on each screen, the day coming in at the window, the warm cast of dusk, rooms gone dim after dark with their lamps still on, and a soft shadow under every Clawd. The air moves too: dust drifting in the house's window light, stars twinkling past the station's window, glints on the sea, fireflies at the camp after sundown.
 
-With reduced motion turned on in your system settings, the Desktop scene holds still: no loops, no drifting clouds or leaves.
+**Hover and switch.** In the Desktop app, a room under the pointer lights up and shows a card: what the room is for and what it holds right now (Claude's memory in the library, your deadlines on the board, git in the server room, the view outside, the medals in the game room), with its light switch. Switch a room off and it goes dim, its screens go dark and its lamps stop glowing, in every scene and every session; `/clawd lights off` does it from the keyboard, the terminal included. A Clawd under the pointer gets hearts and a card saying what he's doing, with a pat.
+
+With reduced motion turned on in your system settings, the Desktop scene holds still: no loops, no drifting clouds, leaves or motes, no flicker.
+
+**In the terminal** the house fills up to 256 columns (narrower, the view follows Clawd), and every cell is painted with its own background, so no terminal's line spacing shows through as stripes. Rooms switched off, and the house after dark, are tinted dim there too.
 
 <img src="docs/compacting.gif" alt="While the conversation is compacted, Clawd stomps a pile of pages into a bundle" width="310" align="right">
 
@@ -112,7 +116,11 @@ With reduced motion turned on in your system settings, the Desktop scene holds s
 
 ![Clawd's day: 3 h 12 min with Claude, 14 turns, 148 tool calls, 5 of 6 tests passed, 3 commits, the time by room, the week, and a 4-day streak](./docs/recap-en.png)
 
-**Live figures** under the house: model, context fill, 5-hour and 7-day plan usage, session cost, and your latest message: how long Claude has been on it (or took on the last one), and the tool calls, edits and commands it made there. Each turns yellow past 50% and red past 80%.
+**Live figures** under the house: model, context fill, 5-hour and 7-day plan usage, session cost, and your latest message: how long Claude has been on it (or took on the last one), and the tool calls, edits and commands it made there. Each turns yellow past 50% and red past 80%, and past 70% a plan window says when it starts over. Folded, the band keeps one line of it: what Clawd is doing, the context, the 5-hour window, this reply, git and the next deadline.
+
+**Plan limits.** At 80%, 95% and 100% of your 5-hour or 7-day window, Clawd tells you once (a toast, and on his bubble): how much is gone and when it starts over, and nearly out with work uncommitted, to commit first. Once a window, however many sessions you have open.
+
+**This session's summary.** `/clawd summary` (or **Summary** in the `/clawd` pane) shows a card of the session so far: how long Clawd worked alongside Claude, replies, tool calls, the files changed with their +/− lines, commands (and how many failed), tests, commits, pushes, cost, and the files changed most. When the session ends you get it in a toast, and the next session in the same project opens with it.
 
 **Deadline radar.** `/deadline add 12/24 Launch` puts a countdown on the band and the wall calendar, and pins a note on the board, coloured by how near it is. With under 3 days left Clawd sweats; under 24 hours the calendar flashes red and he panics.
 
@@ -146,6 +154,8 @@ Third-party marketplaces don't auto-update by default, and a marketplace can't s
 | `/clawd` | Open the Clawd Sidekick pane: big Clawd, all your deadlines, Today and Trophies |
 | `/clawd changes` | Every file Claude changed this session (+/− lines) and every command it ran (✓/✗) |
 | `/clawd recap` | Today's card: time worked, the figures, the rooms, the week and your streak |
+| `/clawd summary` | This session's card: time worked, replies, files changed, commands, commits, cost |
+| `/clawd lights off` · `on` · `off library` | Switch the lights, everywhere or in one room (library, codelab, terminal, web, game) |
 | `/clawd trophies` | Every trophy family: your tier, your progress, what the next tier brings |
 | `/clawd hat <name>` · `auto` · `none` | Put on a hat you've earned (`auto`: the finest) |
 | `/clawd pal <name>` · `auto` · `none` | Choose the pal who walks the floor |
@@ -173,15 +183,15 @@ A mod runs with your permissions, so here is everything this one reaches (`claud
 
 - **Model calls and tokens: none.** Clawd never calls a model, never adds to the system prompt or to a tool's result, and its commands answer in a toast rather than in the conversation, so nothing it says is read by the model. Running a `/clawd` or `/deadline` command leaves only its own one-line record, as any slash command does.
 - **Processes**: `date +%z` and `readlink /etc/localtime` once at start, for your time zone and which way the seasons run; `defaults read -g AppleLanguages` once, on macOS, when the language is `auto` and no `LANG` is set; and in the project's folder, every 30 seconds and after Claude edits or runs something, `git status --porcelain -b` and `git log -1 --format=%ct`, read-only, for the git safety net.
-- **Storage**: your deadlines, scene, language, pet count, the names, caps and birthday you set, each project's scene, each day's figures for the recap, the running totals for the trophies, and each open session's word to its neighbors (its project and what it's doing, removed when it ends), in the plugin's own store on your machine.
+- **Storage**: your deadlines, scene, language, pet count, the names, caps and birthday you set, each project's scene, each day's figures for the recap, the running totals for the trophies, which rooms' lights are off, which plan-limit warnings were given (by window), each project's last session summary (shown once, then removed), and each open session's word to its neighbors (its project and what it's doing, removed when it ends), in the plugin's own store on your machine. Data that features since removed left there is deleted when a session starts.
 - **Environment**: reads `LANG`, `LC_ALL`, `LC_MESSAGES` and `TZ`.
 - **Network: none.**
 
 ## How it works
 
 - `hooks/themes.ts` draws the four scenes procedurally on a 256 × 28 canvas (`hooks/pixels.ts`). `hooks/scene.ts` adds the Clawds, the crew's places in each game, and what the pointer finds.
-- **Desktop app**: `hooks/scene-svg.ts` turns it into one interactive SVG in three layers. The still scene is drawn once. Each of the scene's moving parts loops as a SMIL flipbook of only the pixels that change, and the game being played is a layer of its own, so their periods never multiply. Walking is `animateTransform`, and hovering is CSS `:hover` and `<title>`. `color-scheme: light dark` on the root keeps the frame transparent on any theme. When the system asks for reduced motion, every loop holds its first frame and nothing drifts.
-- **Terminal**: `hooks/scene-client.tsx` is a `Client` surface module with its own frame clock. It draws two pixels per cell with `▀`, and its camera follows Clawd across a crop of up to 150 columns.
+- **Desktop app**: `hooks/scene-svg.ts` turns it into one SVG, drawn as an image so a new drawing replaces the last without a blink. The still scene is drawn once. Each of the scene's moving parts loops as a SMIL flipbook of only the pixels that change, and the game being played is a layer of its own, so their periods never multiply. Walking is `animateTransform`. Over the pixels goes the light (`hooks/light.ts`): per room, a dim veil masked by radial pools around its lights, a blur for their glow, and gradients for depth. What the pointer finds is the band's own: unseen strips over each room and Clawd that, hovered, show a native card and an image of what lights up. `color-scheme: light dark` on the root keeps the frame transparent on any theme. When the system asks for reduced motion, every loop holds its first frame and nothing drifts.
+- **Terminal**: `hooks/raster.ts` draws the house as a `Raster`, two pixels a cell, each cell carrying its own background, up to 256 columns; the band repaints it in place every tick with `$.ui.blit`.
 - `hooks/decor.ts` adds the holidays and the falling petals and leaves; `hooks/seasons.ts` works out the season and the holiday; `hooks/events.ts` turns a finished command into a moment (a test run, a commit, a push, a pull request).
 - `hooks/i18n.ts` holds every string in both languages.
 
@@ -197,7 +207,7 @@ Type declarations for your Claude Code build appear in `.claude-plugin/types/` t
 
 ### Adding a scene
 
-A scene is one entry in `THEMES` (`hooks/themes.ts`), and its type, `ThemeArt`, makes every part required: the drawing, its moving parts, the light and the toy that answer the pointer, the sky, the signs, and `memory`, the thing in the library zone that shows how full the context is. Leave one out and the mod doesn't type-check. Then the tests in *what happens shows in every scene* run your scene through every memory level and every moment (asking, stamping, sending, tidying, cheering, sweating), and fail if any of them doesn't show or the SVG outgrows its limit.
+A scene is one entry in `THEMES` (`hooks/themes.ts`), and its type, `ThemeArt`, makes every part required: the drawing, its moving parts, the light and the toy that answer the pointer, the sky, the signs, `memory` (the thing in the library zone that shows how full the context is), and `glows`, `isIndoor` and `hasDaylight` (what gives off light in each room, and how the scene dims). Leave one out and the mod doesn't type-check. Then the tests in *what happens shows in every scene* run your scene through every memory level and every moment (asking, stamping, sending, tidying, cheering, sweating), and fail if any of them doesn't show or the SVG outgrows its limit.
 
 ## Credits
 

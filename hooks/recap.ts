@@ -101,7 +101,7 @@ const ROOM_COLOR: Record<RoomId, string> = { library: '#C8873F', codelab: '#4D8D
 type Icon = { art: readonly string[]; key: Readonly<Record<string, string>> }
 
 const W = '#FFFFFF'
-const ICONS: Record<'turn' | 'tool' | 'edit' | 'run' | 'test' | 'commit' | 'push' | 'tidy', Icon> = {
+const ICONS: Record<'turn' | 'tool' | 'edit' | 'run' | 'test' | 'commit' | 'push' | 'tidy' | 'coin', Icon> = {
   turn: { art: ['.#####.', '#######', '#.#.#.#', '#######', '.#####.', '.##....', '#......'], key: { '#': W, '.': '' } },
   tool: { art: ['....#.#', '....###', '...###.', '..###..', '.###...', '###....', '.#.....'], key: { '#': '#C9CDD3' } },
   edit: { art: ['#####..', '#...##.', '#.##..#', '#.....#', '#.###.#', '#.....#', '#######'], key: { '#': W } },
@@ -110,6 +110,7 @@ const ICONS: Record<'turn' | 'tool' | 'edit' | 'run' | 'test' | 'commit' | 'push
   commit: { art: ['..www..', '..www..', '...w...', '.rrrrr.', 'rrrrrrr', '.......', '.rr.rr.'], key: { w: '#9C6238', r: '#E5484D' } },
   push: { art: ['#######', '##...##', '#.#.#.#', '#..#..#', '#..r..#', '#######', '.......'], key: { '#': W, r: '#E5484D' } },
   tidy: { art: ['rrrrrr.', '.bbbbbb', 'gggggg.', '.yyyyy.', 'rrrrrr.', '.......', '.......'], key: { r: '#E5484D', b: '#4D8DF6', g: '#4CB363', y: '#F5C542' } },
+  coin: { art: ['..yyy..', '.yyyyy.', 'yyoyyyy', 'yyoyyyy', 'yyyyyyy', '.yyyyy.', '..yyy..'], key: { y: '#F5C542', o: '#FFF1B8' } },
 }
 
 function icon(which: keyof typeof ICONS, x: number, y: number): string {
@@ -208,6 +209,89 @@ export function recapSvg(day: Day, week: readonly (Day | undefined)[], streak: n
     out += `<rect x="${36 + i * 10}" y="${127 - height}" width="7" height="${height}" fill="${isToday ? '#D97757' : '#7A5546'}"/>`
   })
   out += text(230, 125, 8, '#D97757', escape(w.recapStreak(streak)), 'text-anchor="end" font-weight="700"')
+  out += text(120, 135.5, 4.2, '#7D7873', 'clawd-sidekick · github.com/Tunai-0511/clawd-sidekick', 'text-anchor="middle"')
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 140" width="100%" height="100%"><style>:root{color-scheme:light dark;background:transparent}</style>${out}</svg>`
+}
+
+// ── The session's summary ────────────────────────────────────────────────
+
+export type SessionSummary = {
+  totals: Day
+  /** When the session began, and the person's clock: minutes east of UTC. */
+  startedAt: number
+  offset: number
+  files: readonly { path: string; added: number; removed: number }[]
+  added: number
+  removed: number
+  failed: number
+  usd: number | null
+}
+
+/** The session in one line, for a toast. */
+export function sessionLine(d: SessionSummary, lang: Lang): string {
+  const w = say(lang)
+  if (!hasWork(d.totals)) return w.sessionQuiet
+  return w.sessionLine({
+    work: duration(d.totals.workMs, lang),
+    turns: d.totals.turns,
+    tools: d.totals.tools,
+    files: d.files.length,
+    added: d.added,
+    removed: d.removed,
+    runs: d.totals.runs,
+    failed: d.failed,
+    commits: d.totals.commits,
+    pushes: d.totals.pushes,
+    usd: d.usd === null ? null : d.usd.toFixed(2),
+  })
+}
+
+const clockOf = (at: number, offset: number): string => new Date(at + offset * 60_000).toISOString().slice(11, 16)
+
+/**
+ * The session as a 240 × 140 card, in the day card's dress: the project and
+ * when it began, Clawd in the session's pose with how long he worked, eight
+ * figures, and the files changed most.
+ */
+export function sessionSvg(d: SessionSummary, lang: Lang, project: string): string {
+  const w = say(lang)
+  const t = d.totals
+  let out = ''
+  out += '<rect x="0.5" y="0.5" width="239" height="139" rx="6" fill="#262624" stroke="#D97757" stroke-width="1"/>'
+  out += text(10, 17, 10, '#D97757', escape(project === '' ? w.sessionTitle : `${w.sessionTitle} · ${project}`), 'font-weight="700"')
+  out += text(230, 17, 6.5, '#A8A29E', escape(w.sessionSince(clockOf(d.startedAt, d.offset))), 'text-anchor="end"')
+  out += `<svg x="8" y="24" width="84" height="29.4" viewBox="0 0 40 14" shape-rendering="crispEdges">${clawdArt(poseOf(t))}</svg>`
+  if (!hasWork(t)) {
+    out += text(10, 66, 7, '#F3E3C3', escape(w.sessionQuiet), 'font-weight="700"')
+  } else {
+    out += text(10, 60, 5.2, '#A8A29E', escape(w.recapWorkedLead))
+    out += text(10, 70.5, 9.5, '#F3E3C3', escape(duration(t.workMs, lang)), 'font-weight="700"')
+  }
+  const figures: [keyof typeof ICONS, string, string][] = [
+    ['turn', String(t.turns), w.sessionReplies(t.turns)],
+    ['tool', String(t.tools), w.recapTools(t.tools)],
+    ['edit', `${d.files.length}`, `${w.sessionFiles(d.files.length)} +${d.added} −${d.removed}`],
+    ['run', String(t.runs), d.failed > 0 ? `${w.sessionCommands(t.runs)} · ${w.sessionFailed(d.failed)}` : w.sessionCommands(t.runs)],
+    ['test', `${t.testsPassed}/${t.testsPassed + t.testsFailed}`, w.recapTests],
+    ['commit', String(t.commits), w.recapCommits(t.commits)],
+    ['push', String(t.pushes + t.prsOpened), w.recapPushes(t.pushes + t.prsOpened)],
+    ['coin', d.usd === null ? '–' : `$${d.usd.toFixed(2)}`, w.sessionCost],
+  ]
+  figures.forEach(([which, value, label], i) => {
+    const x = 100 + (i % 2) * 66
+    const y = 25 + Math.floor(i / 2) * 12
+    out += icon(which, x, y)
+    out += text(x + 10, y + 6.4, 7.5, '#FFFFFF', `${escape(value)}<tspan font-size="5.2" fill="#A8A29E" dx="2">${escape(label)}</tspan>`, 'font-weight="700"')
+  })
+  out += text(10, 88, 5.2, '#A8A29E', escape(w.sessionTop))
+  const top = [...d.files].sort((a, b) => b.added + b.removed - (a.added + a.removed)).slice(0, 4)
+  top.forEach((f, i) => {
+    const y = 97 + i * 8
+    const name = f.path.length > 46 ? `…${f.path.slice(-45)}` : f.path
+    out += text(10, y, 5.4, '#E7E5E4', escape(name))
+    out += text(230, y, 5.4, '#4CB363', `+${f.added}<tspan fill="#E5484D" dx="3">−${f.removed}</tspan>`, 'text-anchor="end"')
+  })
+  if (top.length === 0) out += text(10, 97, 5.4, '#7D7873', '–')
   out += text(120, 135.5, 4.2, '#7D7873', 'clawd-sidekick · github.com/Tunai-0511/clawd-sidekick', 'text-anchor="middle"')
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 140" width="100%" height="100%"><style>:root{color-scheme:light dark;background:transparent}</style>${out}</svg>`
 }

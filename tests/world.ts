@@ -16,12 +16,14 @@ export type World = {
   root: string
   /** What the plugin keeps across sessions, as it keeps it. */
   store: Map<string, unknown>
+  /** The plan's windows session.usage reports; a test changes them. */
+  limits: { kind: string; percentUsed: number; resetsAt?: string }[]
 }
 
 export type Extra = { zone?: string; now?: number; git?: { status: string; lastCommit: number } }
 
 export function world(on: On, replies: string[] = [], stored: Readonly<Record<string, unknown>> = {}, system = 'zh-Hant-TW', extra: Extra = {}): World {
-  const w: World = { clock: mock.clock(on, { now: extra.now ?? NOW }), toasts: [], opened: [], prompts: [], replies, root: '/Users/me/projects/my-app', store: new Map() }
+  const w: World = { clock: mock.clock(on, { now: extra.now ?? NOW }), toasts: [], opened: [], prompts: [], replies, root: '/Users/me/projects/my-app', store: new Map(), limits: [{ kind: 'five_hour', percentUsed: 31 }, { kind: 'seven_day', percentUsed: 12 }] }
   // A store in memory the test can look into, each value copied the way a file would.
   const copy = (value: unknown): unknown => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)))
   for (const [key, value] of Object.entries(stored)) w.store.set(key, copy(value))
@@ -37,6 +39,7 @@ export function world(on: On, replies: string[] = [], stored: Readonly<Record<st
   on('store.keys', () => ({ value: [...w.store.keys()] }))
   mock.env(on, { HOME: '/tmp/clawd-test' })
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
   on('session.root', () => ({ value: w.root }))
   on('session.id', () => ({ value: 'this-session' }))
   on('process.run', (_$, e) => {
@@ -60,10 +63,7 @@ export function world(on: On, replies: string[] = [], stored: Readonly<Record<st
     value: {
       startedAt: NOW,
       context: { window: 1_000_000, percent: 42 },
-      rateLimits: [
-        { kind: 'five_hour', percentUsed: 31 },
-        { kind: 'seven_day', percentUsed: 12 },
-      ],
+      rateLimits: w.limits,
       cost: { usd: 1.84 },
     },
   }))

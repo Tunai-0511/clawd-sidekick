@@ -4,7 +4,7 @@
 // pointer looks for them, and the screen and terminal the animations know,
 // so the Clawds behave the same anywhere; only what is around them changes.
 
-import type { SceneProps, Theme } from '../types'
+import type { RoomId, SceneProps, Theme } from '../types'
 import { C, digit, hash, px, rect, stamp, SW, type Box, type Grid } from './pixels'
 
 export type Part = Box & { ticks: number }
@@ -34,7 +34,28 @@ export type ThemeArt = {
    * `box` and looping over `ticks`. Every scene must have both.
    */
   eggs: { star: Box; critter: { box: Box; ticks: number; draw: (g: Grid, t: number) => void } }
+  /**
+   * What gives off light, room by room, for the Desktop scene's lighting: a
+   * screen, a lamp or a rack's lights go dark with their room's switch; a
+   * window lets the day in; a fire burns whatever the switch says. Every
+   * scene must list its own.
+   */
+  glows: readonly Glow[]
+  /** Indoors, a room whose lights are off goes dim; outdoors only its lights go out. */
+  isIndoor: boolean
+  /** Whether daylight reaches in: through a window, or all around outdoors. */
+  hasDaylight: boolean
 }
+
+export type Glow = { room: RoomId; box: Box; color: string; kind: 'screen' | 'lamp' | 'leds' | 'window' | 'fire' }
+
+/** The two desk screens every scene has: the code lab's and the terminal room's. */
+const SCREENS: readonly Glow[] = [
+  { room: 'codelab', box: { x: 77, y: 10, w: 10, h: 6 }, color: '#BFE9FF', kind: 'screen' },
+  { room: 'terminal', box: { x: 99, y: 11, w: 10, h: 6 }, color: '#8FF0B4', kind: 'screen' },
+]
+
+const ARCADE_SCREEN: Glow = { room: 'game', box: { x: 178, y: 9, w: 8, h: 5 }, color: '#B8F5C8', kind: 'screen' }
 
 const ROOM_EDGES = [46, 94, 136, 174] as const
 
@@ -710,6 +731,15 @@ export const THEMES: Record<Theme, ThemeArt> = {
     signs: { fill: '#F3E3C3', stroke: 'none', y: 2.35 },
     memory: { box: { x: 3, y: 5, w: 41, h: 20 }, draw: houseMemory },
     eggs: { star: WINDOW, critter: { box: { x: 141, y: 10, w: 26, h: 5 }, ticks: 48, draw: sparrow } },
+    glows: [
+      { room: 'library', box: { x: 24, y: 14, w: 6, h: 3 }, color: '#FFE6A0', kind: 'lamp' },
+      ...SCREENS,
+      { room: 'terminal', box: { x: 121, y: 7, w: 7, h: 15 }, color: '#8FF0B4', kind: 'leds' },
+      { room: 'web', box: WINDOW, color: '#E6F4FF', kind: 'window' },
+      ARCADE_SCREEN,
+    ],
+    isIndoor: true,
+    hasDaylight: true,
   },
   beach: {
     draw: beach,
@@ -734,6 +764,9 @@ export const THEMES: Record<Theme, ThemeArt> = {
     signs: { fill: '#FFFFFF', stroke: '#2A1A15', y: 2.6 },
     memory: { box: { x: 37, y: 16, w: 7, h: 9 }, draw: (g, level) => bookStack(g, 37, level) },
     eggs: { star: { x: 0, y: 0, w: SW, h: 13 }, critter: { box: { x: 131, y: 8, w: 16, h: 9 }, ticks: 32, draw: whale } },
+    glows: [...SCREENS, { room: 'web', box: { x: 158, y: 2, w: 6, h: 3 }, color: '#FFF1B8', kind: 'lamp' }],
+    isIndoor: false,
+    hasDaylight: true,
   },
   space: {
     draw: space,
@@ -750,6 +783,16 @@ export const THEMES: Record<Theme, ThemeArt> = {
     signs: { fill: '#BFF8FF', stroke: 'none', y: 2.35 },
     memory: { box: { x: 3, y: 5, w: 39, h: 20 }, draw: spaceMemory },
     eggs: { star: WINDOW, critter: { box: WINDOW, ticks: 48, draw: saucer } },
+    glows: [
+      { room: 'library', box: { x: 3, y: 5, w: 11, h: 19 }, color: '#5EE6F0', kind: 'leds' },
+      { room: 'library', box: { x: 24, y: 15, w: 5, h: 2 }, color: '#5EE6F0', kind: 'lamp' },
+      ...SCREENS,
+      { room: 'terminal', box: { x: 121, y: 5, w: 9, h: 17 }, color: '#7FEFFF', kind: 'leds' },
+      { room: 'web', box: WINDOW, color: '#9FB8FF', kind: 'window' },
+      ARCADE_SCREEN,
+    ],
+    isIndoor: true,
+    hasDaylight: false,
   },
   forest: {
     draw: forest,
@@ -775,6 +818,16 @@ export const THEMES: Record<Theme, ThemeArt> = {
     signs: { fill: '#FFFFFF', stroke: '#2A1A15', y: 2.6 },
     memory: { box: { x: 38, y: 16, w: 7, h: 9 }, draw: (g, level) => bookStack(g, 38, level) },
     eggs: { star: { x: 0, y: 0, w: SW, h: 12 }, critter: { box: { x: 138, y: 12, w: 16, h: 10 }, ticks: 48, draw: deer } },
+    glows: [
+      { room: 'library', box: { x: 31, y: 13, w: 5, h: 5 }, color: '#FFE08A', kind: 'lamp' },
+      ...SCREENS,
+      { room: 'terminal', box: { x: 122, y: 12, w: 6, h: 2 }, color: '#F5C542', kind: 'leds' },
+      { room: 'web', box: { x: 151, y: 6, w: 3, h: 2 }, color: '#FFE08A', kind: 'lamp' },
+      { room: 'game', box: { x: 179, y: 14, w: 9, h: 8 }, color: '#F2A65A', kind: 'fire' },
+      { room: 'game', box: { x: 190, y: 3, w: 56, h: 5 }, color: '#F5C542', kind: 'leds' },
+    ],
+    isIndoor: false,
+    hasDaylight: true,
   },
 }
 

@@ -11,7 +11,7 @@
 import type { Doing, Egg, Game, Hat, Pal, SceneActor, SceneProps, Theme, TimeOfDay } from '../types'
 import { say, type Lang, type RoomId } from './i18n'
 import { blank, C, FEET, FLOOR, hash, px, rect, type Box, type Grid } from './pixels'
-import { decorate, drawFalling, MEDAL_BOX } from './decor'
+import { decorate, drawFalling } from './decor'
 import { drawScene, THEMES } from './themes'
 
 export type { Doing, Game, SceneActor, SceneProps, Theme, TimeOfDay }
@@ -1054,7 +1054,7 @@ export function composeScene(s: SceneProps, t: number, now: number, options: Com
 
 // ── What the pointer finds ─────────────────────────────────────────────────
 
-/** What hovering a Clawd says about him. */
+/** What a Clawd's hover card says about him. */
 export function actorTip(a: SceneActor, s: Pick<SceneProps, 'lang' | 'names'>): string {
   const words = say(s.lang)
   if (a.neighbor !== undefined) return `${words.neighborClawd(a.neighbor)} · ${a.label || words.doings[a.doing]}`
@@ -1064,48 +1064,3 @@ export function actorTip(a: SceneActor, s: Pick<SceneProps, 'lang' | 'names'>): 
   return `${name} · ${words.doings[a.doing]}`
 }
 
-export const BOARD: Box = { x: 48, y: 5, w: 16, h: 9 }
-export const CALENDAR: Box = { x: 66, y: 4, w: 9, h: 8 }
-
-const inside = (b: Box, x: number, y: number): boolean => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h
-
-export type Hit = { kind: 'actor'; id: string } | { kind: 'board' } | { kind: 'calendar' } | { kind: 'memory' } | { kind: 'medals' } | { kind: 'room'; id: string }
-
-/** What is under scene pixel (x, y): a Clawd first (the main one on top), then the wall's things, then the room. */
-export function hitTest(s: SceneProps, now: number, x: number, y: number): Hit | undefined {
-  const order = [...s.actors].sort((a, b) => Number(b.id === 'main') - Number(a.id === 'main'))
-  const actor = order.find(a => {
-    const ax = actorX(a, now)
-    return x >= ax && x < ax + 16 && y >= 11 && y <= FEET
-  })
-  if (actor !== undefined) return { kind: 'actor', id: actor.id }
-  if (inside(BOARD, x, y)) return { kind: 'board' }
-  if (inside(CALENDAR, x, y)) return { kind: 'calendar' }
-  if (inside(THEMES[s.theme].memory.box, x, y)) return { kind: 'memory' }
-  if (s.medals.length > 0 && inside(MEDAL_BOX, x, y)) return { kind: 'medals' }
-  const room = ROOMS.find(r => x >= r.x && x < r.x + r.w && y >= 3 && y < FLOOR)
-  return room === undefined ? undefined : { kind: 'room', id: room.id }
-}
-
-/** The line a hover shows. */
-export function tipOf(s: SceneProps, hit: Hit): string {
-  const words = say(s.lang)
-  switch (hit.kind) {
-    case 'actor': {
-      const a = s.actors.find(one => one.id === hit.id)
-      return a === undefined ? '' : actorTip(a, s)
-    }
-    case 'board':
-      return s.notes.length === 0 ? words.boardEmpty : words.board(s.notes.map(n => n.text))
-    case 'calendar':
-      return s.deadline === '' ? words.calendarEmpty : words.calendar(s.deadline)
-    case 'memory':
-      return words.memoryTip(s.theme, s.memory)
-    case 'medals':
-      return words.medalsTip(s.trophyCount[0], s.trophyCount[1])
-    case 'room': {
-      const id = hit.id as RoomId
-      return words.roomTip(words.rooms[s.theme][id], words.roomPurpose[id])
-    }
-  }
-}

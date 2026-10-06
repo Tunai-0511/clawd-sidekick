@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.17.0
+
+- **No more flashing on the Desktop.** The house is drawn as an image, which a new drawing replaces without a blink; it used to be a frame that went blank for a moment each time Clawd moved or his bubble changed.
+- **Light and air.** Each room is lit by its own lamps and screens (`ThemeArt.glows`, required for every scene): pools of light, a glow on the screens, daylight at the windows, dusk's warm cast, rooms dim after dark, soft shadows under the Clawds, and moving air: dust in the light, twinkling stars, glints on the sea, fireflies.
+- **Hover cards with a light switch.** Over a room on the Desktop: the room lights up and a card says what it's for and what it holds now, with a 💡 switch; off, the room dims and its screens go dark, in every scene and session. Over a Clawd: hearts and his card, with a pat. `/clawd lights on|off [room]` from the keyboard.
+- **Plan limits.** At 80%, 95% and 100% of the 5-hour or 7-day window, a toast and Clawd's bubble say how much is gone and when it resets (and to commit first when nearly out). Past 70% the band shows the time to the reset.
+- **This session's summary.** `/clawd summary` and a **Summary** button: a card of the session's work, files and cost. At the session's end it comes as a toast, and the next session in the project opens with it.
+- **The terminal house is whole and stripe-free.** Drawn as a `Raster` up to 256 columns wide (it was cropped to 150), every cell painted with its background so line spacing no longer shows as stripes; dark rooms are tinted there too. The terminal house no longer answers the pointer.
+- The folded band shows the context, the 5-hour window, this reply, git and the next deadline. Neighbors from the same project are counted once ("api ×3"); "last reply" waits for the first reply.
+
 ## 0.16.1
 
 - The band's turn figures read as one group and say what they are: "this reply 0:17 · tools 2 · edited 0 files · ran 2 commands" while Claude works on your latest message, "last reply …" after. Chinese: 這次回覆／上次回覆 instead of 回合／上回合.

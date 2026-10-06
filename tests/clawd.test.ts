@@ -9,12 +9,13 @@ import { MEDAL_BOX } from '../hooks/decor'
 import { fileChangeOf } from '../hooks/changes'
 import { needsCommit, parseStatus } from '../hooks/git'
 import { emptyLife, FAMILIES, hatFor, lifeFromDays, medalsOf, palFor, reached, TROPHY_TOTAL } from '../hooks/trophies'
-import { composeScene, eggOf, hatRise, hitTest, layoutFor, SPOT_X, STAR_TICKS, tipOf } from '../hooks/scene'
+import { actorTip, composeScene, eggOf, hatRise, layoutFor, SPOT_X, STAR_TICKS } from '../hooks/scene'
 import { sceneSvg } from '../hooks/scene-svg'
+import { roomSpans } from '../hooks/light'
 import { holidayOf, isSouthern, seasonOf, zoneOf } from '../hooks/seasons'
 import { CYCLE, frame, H, POSES, W } from '../hooks/sprite'
 import { THEME_ORDER, THEMES } from '../hooks/themes'
-import { BAND, NOW, SURFACES, world } from './world'
+import { BAND, BAND_PROPS, NOW, SURFACES, world } from './world'
 
 const TAIPEI = 480
 const DAY = 86_400_000
@@ -55,6 +56,7 @@ const sceneOf = (game: Game, time: TimeOfDay = 'day', lang: 'zh' | 'en' = 'zh', 
   names: {},
   season,
   holiday: 'none',
+  dark: [],
 })
 
 describe('the pure parts', () => {
@@ -102,38 +104,54 @@ describe('the pure parts', () => {
     expect(layoutFor('sleep', 0).slots).toHaveLength(0)
   })
 
-  test('the pointer finds Clawds, the board, the calendar and the rooms', async () => {
+  test("a Clawd's hover card says who he is and what he is doing", async () => {
     const s = sceneOf('pong')
-    const later = NOW + 10_000
-    expect(hitTest(s, later, SPOT_X.code + 8, 20)).toEqual({ kind: 'actor', id: 'main' })
-    expect(tipOf(s, { kind: 'actor', id: 'main' })).toContain('改 register.tsx')
-    expect(tipOf(s, { kind: 'actor', id: 'c1' })).toContain('在打電動')
-    expect(tipOf(s, hitTest(s, later, 52, 8)!)).toContain('季報')
-    expect(tipOf(s, hitTest(s, later, 70, 8)!)).toContain('剩 10 天')
-    expect(hitTest(s, later, 100, 6)).toEqual({ kind: 'room', id: 'terminal' })
+    const who = (scene: SceneProps, id: string): SceneActor => scene.actors.find(a => a.id === id)!
+    expect(actorTip(who(s, 'main'), s)).toContain('改 register.tsx')
+    expect(actorTip(who(s, 'c1'), s)).toContain('在打電動')
     const english = sceneOf('pong', 'day', 'en')
-    expect(tipOf(english, { kind: 'actor', id: 'c1' })).toBe('Blue-cap Clawd · playing the arcade')
-    expect(tipOf(english, { kind: 'room', id: 'terminal' })).toStartWith('Server room')
+    expect(actorTip(who(english, 'c1'), english)).toBe('Blue-cap Clawd · playing the arcade')
   })
 
-  test('every scene, game and time of day makes a transparent, hoverable SVG inside the size limit', async () => {
+  test('every scene, game and time of day makes a transparent, lit SVG inside the size limit', async () => {
     for (const theme of ['house', 'beach', 'space', 'forest'] as const)
     for (const game of ['pong', 'volley', 'rope', 'tower', 'sleep'] as const) {
       for (const time of ['day', 'dusk', 'night'] as const) {
         const svg = sceneSvg(sceneOf(game, time, 'zh', theme), NOW)
         expect(svg.length).toBeLessThan(131072)
         expect(svg).toContain('color-scheme:light dark')
-        expect(svg).toContain('.clawd:hover')
-        expect(svg).toContain('· 季報 · 剩 9 天')
+        // The light's own bloom on every screen, the Clawds' shadows, and dim rooms after dark.
+        expect(svg).toContain('filter="url(#bloom)"')
+        expect(svg).toContain('<ellipse cx="20" cy="25.15"')
+        if (time === 'night') expect(svg).toContain('mask="url(#veil-')
+        // Every room with its lights off at night, still inside the limit.
+        const dark = sceneSvg({ ...sceneOf(game, 'night', 'zh', theme), dark: ['library', 'codelab', 'terminal', 'web', 'game'] }, NOW)
+        expect(dark.length).toBeLessThan(131072)
       }
     }
     const english = sceneSvg(sceneOf('volley', 'day', 'en'), NOW)
     expect(english).toContain('Game room')
-    expect(english).toContain('Board: deadlines')
     expect(english).not.toContain('遊戲間')
     expect(sceneSvg(sceneOf('volley', 'night', 'zh', 'beach'), NOW)).toContain('沙灘球場')
-    expect(sceneSvg(sceneOf('pong', 'day', 'en', 'forest'), NOW)).toContain('Campfire')
-    expect(sceneSvg(sceneOf('pong', 'day', 'en', 'space'), NOW)).toContain('Outside: the endless dark')
+  })
+
+  test('every scene lists what gives off light, and a room switched off goes dim with its screens dark', async () => {
+    for (const theme of THEME_ORDER) {
+      const art = THEMES[theme]
+      // The two desk screens are in every scene; each glow sits inside its room.
+      expect(art.glows.filter(g => g.kind === 'screen').length).toBeGreaterThanOrEqual(2)
+      for (const g of art.glows) {
+        const span = roomSpans().find(r => r.id === g.room)!
+        expect(g.box.x).toBeGreaterThanOrEqual(span.x0 - 1)
+        expect(g.box.x + g.box.w).toBeLessThanOrEqual(span.x1 + 1)
+      }
+      const lit = sceneSvg(sceneOf('pong', 'day', 'zh', theme), NOW)
+      const off = sceneSvg({ ...sceneOf('pong', 'day', 'zh', theme), dark: ['codelab'] }, NOW)
+      // The code lab's screen goes black under its cover either way; indoors the room dims too.
+      expect(off).toContain('<rect x="77" y="10" width="10" height="6" fill="#0B0F14"')
+      expect(lit).not.toContain('fill="#0B0F14"')
+      if (art.isIndoor) expect(off).toContain('mask="url(#veil-codelab)"')
+    }
   })
 })
 
@@ -193,9 +211,6 @@ describe('what happens shows in every scene', () => {
       const scene = (memory: number): Uint8Array => composeScene({ ...withMain(theme, 'code'), memory }, 0, NOW)
       expect(differing(scene(0), scene(10), box)).toBeGreaterThan(8)
       expect(differing(scene(4), scene(5), box)).toBeGreaterThan(0)
-      expect(sceneSvg({ ...sceneOf('pong', 'day', 'zh', theme), memory: 6 }, NOW)).toContain('記憶（context），大約 60% 滿')
-      expect(tipOf({ ...sceneOf('pong', 'day', 'en', theme), memory: 3 }, { kind: 'memory' })).toContain('about 30% full')
-      expect(hitTest(withMain(theme, 'code'), NOW, box.x + 1, box.y + box.h - 1)).toEqual({ kind: 'memory' })
     }
   })
 
@@ -280,8 +295,6 @@ describe('trophies', () => {
     const medals = ['legend', 'gold', 'gold', 'silver', 'silver', 'silver', 'bronze', 'bronze', 'bronze', 'bronze'] as const
     for (const theme of THEME_ORDER) {
       expect(differing(composeScene({ ...at(theme), medals: [...medals] }, 0, NOW), composeScene(at(theme), 0, NOW), MEDAL_BOX)).toBeGreaterThan(40)
-      expect(sceneSvg({ ...at(theme), medals: [...medals], trophyCount: [23, 79] }, NOW)).toContain('成就 23 / 79')
-      expect(tipOf({ ...at(theme), medals: [...medals], trophyCount: [23, 79] }, hitTest({ ...at(theme), medals: [...medals] }, NOW, 200, 9)!)).toContain('23 / 79')
       for (const hat of ['party', 'crown', 'halo', 'wizard', 'captain', 'flower', 'explorer', 'graduation', 'headphones'] as const) {
         const s = { ...at(theme), hat }
         const around = { x: SPOT_X.code, y: 8, w: 16, h: 8 }
@@ -345,8 +358,8 @@ describe('neighbors', () => {
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const svg = String((await ui.find({ type: 'Svg' }))?.props.source)
     expect(svg).toContain('api・跑 npm test')
-    expect(svg).toContain('鄰居 Clawd（api）')
-    expect(svg).not.toContain('鄰居 Clawd（web）')
+    expect(await ui.find({ text: /鄰居 Clawd（api）/ })).toBeDefined()
+    expect(await ui.find({ text: /鄰居 Clawd（web）/ })).toBeUndefined()
     expect(await ui.find({ text: /api、web/ })).toBeDefined()
   })
 
@@ -356,12 +369,12 @@ describe('neighbors', () => {
     await $.turn.start({ text: '修 bug', turnId: 't1' })
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const during = String((await ui.find({ type: 'Svg' }))?.props.source)
-    expect(during).toContain('在打排球')
+    expect(await ui.find({ text: /在打排球/ })).toBeDefined()
     expect(during).toContain('api・跑 npm test')
     await w.clock.advance(70_000)
     const after = String((await ui.find({ type: 'Svg' }))?.props.source)
     expect(after).not.toContain('api・')
-    expect(after).toContain('在打排球')
+    expect(await ui.find({ text: /在打排球/ })).toBeDefined()
   })
 })
 
@@ -393,7 +406,7 @@ describe('daily life, rare sights and making them yours', () => {
       await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
       await $.turn.start({ text: '修 bug', turnId: 't1' })
       const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
-      expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toContain(words)
+      expect(await ui.find({ text: new RegExp(words) })).toBeDefined()
     })
   }
 
@@ -461,9 +474,8 @@ describe('daily life, rare sights and making them yours', () => {
     await run('cap 1 red')
     expect(w.toasts.at(-1)).toContain('小藍換上了紅帽')
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
-    const svg = String((await ui.find({ type: 'Svg' }))?.props.source)
-    expect(svg).toContain('小橘 · ')
-    expect(svg).toContain('小藍 · ')
+    expect(await ui.find({ text: /小橘 · / })).toBeDefined()
+    expect(await ui.find({ text: /小藍 · / })).toBeDefined()
     const pane = await $.ui.mount({ plugin: 'clawd-sidekick', surface: 'desktop', component: 'Pane', requestId: 'clawd-recap', props: { title: '', isFocused: true, bodyColumns: 90, placement: 'dock' } } as never)
     expect(String((await pane.find({ type: 'Svg' }))?.props.source)).toContain('小橘的一天')
   })
@@ -609,7 +621,7 @@ describe('the band above the prompt', () => {
     expect(bubbleTop(svg)).toBeLessThan(bubbleTop(sceneSvg(sceneOf('volley', 'night', 'zh', 'house', 'winter'), NOW)) - 3)
   })
 
-  test('the house draws as a Client on the terminal and an interactive SVG on the desktop', async ($, on) => {
+  test('the house draws as a Raster on the terminal and an image with hover cards on the desktop', async ($, on) => {
     const w = world(on)
     await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
     // The usage figures load in the background once the session starts.
@@ -625,13 +637,19 @@ describe('the band above the prompt', () => {
       expect(await ui.find({ text: '考我' })).toBeUndefined()
       expect(await ui.find({ text: /樂團/ })).toBeUndefined()
       if (surface === 'terminal') {
-        await ui.resize({ columns: 110, rows: 15, in: 'house' })
-        expect(await ui.find({ text: /書庫/, in: 'house' })).toBeDefined()
+        const raster = await ui.find({ type: 'Raster', key: 'house' })
+        expect(raster?.props.columns).toBe(110)
+        expect(raster?.props.rows).toBe(14)
+        expect(await ui.find({ text: /書庫/ })).toBeDefined()
       } else {
+        // An image, which a new drawing replaces without a blink; the pointer is the band's.
         const svg = await ui.find({ type: 'Svg' })
-        expect(svg?.props.isInteractive).toBe(true)
+        expect(svg?.props.isInteractive).toBeUndefined()
         expect(svg?.props.width).toBe(110 * 8)
         expect(String(svg?.props.source)).toContain('遊戲間')
+        expect(await ui.find({ key: 'room-library' })).toBeDefined()
+        expect(await ui.find({ key: 'clawd-main' })).toBeDefined()
+        expect(await ui.find({ text: /記憶（context）/ })).toBeDefined()
       }
       await ui.unmount()
     }
@@ -649,8 +667,7 @@ describe('the band above the prompt', () => {
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const source = async (): Promise<string> => String((await ui.find({ type: 'Svg' }))?.props.source)
     const first = await source()
-    expect(first).toContain('Launch')
-    expect(first).toContain('在打排球')
+    expect(await ui.find({ text: /在打排球/ })).toBeDefined()
     for (let i = 0; i < 12; i++) {
       await w.clock.advance(5_000)
       expect(await source()).toBe(first)
@@ -667,9 +684,8 @@ describe('the band above the prompt', () => {
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
     expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toContain('commit 好了 abc1234')
     await $.classic.Notification({ message: 'Claude needs your permission', notification_type: 'permission_prompt' })
-    const asking = String((await ui.find({ type: 'Svg' }))?.props.source)
-    expect(asking).toContain('主 Clawd · 需要你批准')
-    expect(asking).not.toContain('>需要你批准</text>')
+    expect(await ui.find({ text: /主 Clawd · 需要你批准/ })).toBeDefined()
+    expect(String((await ui.find({ type: 'Svg' }))?.props.source)).not.toContain('>需要你批准</text>')
   })
 
   test('compacting, Clawd tidies the library, then says it is done', async ($, on) => {
@@ -694,7 +710,7 @@ describe('the band above the prompt', () => {
     await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
     await $.turn.start({ text: '幫我修 bug', turnId: 't0' })
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
-    expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toContain('在打排球')
+    expect(await ui.find({ text: /在打排球/ })).toBeDefined()
     // The reply's figures read as one group.
     expect(await ui.find({ text: /這次回覆 0:00 · 工具 0 · 改 0 檔 · 跑 0 指令/ })).toBeDefined()
   })
@@ -742,22 +758,109 @@ describe('the band above the prompt', () => {
     expect(w.toasts.at(-1)).toContain('剩 10 天')
     const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
     expect(await band.find({ text: /Launch 剩 10 天/ })).toBeDefined()
-    expect(String((await band.find({ type: 'Svg' }))?.props.source)).toContain('日曆：Launch')
-    expect(String((await band.find({ type: 'Svg' }))?.props.source)).toContain('布告欄：截止日')
+    // The code lab's card lists them.
+    expect(await band.find({ text: /布告欄：截止日[\s\S]*Launch/ })).toBeDefined()
   })
 
-  test('on the terminal the pointer names what it is over, and a click pets that Clawd', async ($, on) => {
-    world(on)
+  test('on the terminal the whole house shows as wide as it can, painted again every tick', async ($, on) => {
+    const blits: string[] = []
+    on('ui.blit', async (_$, e) => {
+      blits.push(e.key)
+      return { value: {} }
+    })
+    const w = world(on)
     await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
-    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-    await ui.resize({ columns: 110, rows: 15, in: 'house' })
-    await ui.pointer({ type: 'move', x: SPOT_X.library + 8, y: 10, in: 'house' })
-    expect(await ui.find({ text: /主 Clawd/, in: 'house' })).toBeDefined()
-    await ui.pointer({ type: 'move', x: 100, y: 3, in: 'house' })
-    expect(await ui.find({ text: /機房/, in: 'house' })).toBeDefined()
-    await ui.pointer({ type: 'move', x: SPOT_X.library + 8, y: 10, in: 'house' })
-    await ui.pointer({ type: 'down', x: SPOT_X.library + 8, y: 10, button: 'left', in: 'house' })
-    expect(await ui.find({ text: /嘿嘿|好癢|再摸|♥|被摸了/ })).toBeDefined()
+    const wide = await $.ui.mount({ ...BAND, surface: 'terminal', props: { ...BAND_PROPS, bodyColumns: 300 } })
+    expect((await wide.find({ type: 'Raster', key: 'house' }))?.props.columns).toBe(256)
+    expect(await wide.find({ text: /遊戲間/ })).toBeDefined()
+    await w.clock.advance(500)
+    expect(blits.filter(key => key === 'house').length).toBeGreaterThanOrEqual(3)
+    await wide.unmount()
+    await w.clock.settle()
+  })
+
+  test('over a room on the desktop, a card with its light switch; off, the room dims, in every session', async ($, on) => {
+    const w = world(on)
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const button = await ui.find({ key: 'light-library' })
+    expect(button?.props.label).toBe('💡 關燈')
+    expect(String((await ui.find({ type: 'Svg' }))?.props.source)).not.toContain('veil-library')
+    await ui.press({ key: 'light-library' })
+    expect(w.store.get('darkRooms')).toEqual(['library'])
+    expect((await ui.find({ key: 'light-library' }))?.props.label).toBe('💡 開燈')
+    expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toContain('mask="url(#veil-library)"')
+    // A room with nothing to switch, the house's lookout, has no button.
+    expect(await ui.find({ key: 'light-web' })).toBeUndefined()
+    const run = (args: string) => $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    await run('lights on')
+    expect(w.store.get('darkRooms')).toEqual([])
+    await run('lights off terminal')
+    expect(w.toasts.at(-1)).toContain('機房')
+    expect(w.store.get('darkRooms')).toEqual(['terminal'])
+    await run('lights maybe')
+    expect(w.toasts.at(-1)).toContain('用法')
+    await w.clock.settle()
+  })
+
+  test('near the plan limit Clawd says so once, with when it starts over; the band counts down', async ($, on) => {
+    const w = world(on)
+    const resetsAt = new Date(NOW + 80 * 60_000).toISOString()
+    w.limits = [{ kind: 'five_hour', percentUsed: 85, resetsAt }, { kind: 'seven_day', percentUsed: 40 }]
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    await w.clock.settle()
+    const warned = w.toasts.filter(t => t.includes('5 小時額度已用 80%'))
+    expect(warned).toHaveLength(1)
+    expect(warned[0]).toContain('1 小時 20 分後')
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    expect(await ui.find({ text: /85% · 1 小時 20 分後重置/ })).toBeDefined()
+    // Once a window, across sessions: the store remembers.
+    await $.turn.start({ text: '再一個', turnId: 't1' })
+    await w.clock.advance(10_000)
+    await w.clock.settle()
+    expect(w.toasts.filter(t => t.includes('5 小時額度已用 80%'))).toHaveLength(1)
+    w.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt }]
+    await w.clock.advance(10_000)
+    await w.clock.settle()
+    expect(w.toasts.some(t => t.includes('已用 95%'))).toBe(true)
+    await w.clock.settle()
+  })
+
+  test("a session's summary: on asking, at its end, and the next time in the project", async ($, on) => {
+    const w = world(on)
+    on('tool.call', async () => ({ result: { stdout: 'ok', stderr: '', interrupted: false } as never }))
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    await $.turn.start({ text: '跑測試', turnId: 't1' })
+    await $.tool.call({ tool: 'Bash', command: 'npm test', description: 'Run the tests' } as never)
+    await $.turn.complete({ turnId: 't1', reason: 'answer', answer: '好了', durationMs: 64_000 } as never)
+    await w.clock.settle()
+    const run = (args: string) => $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    await run('summary')
+    expect(w.opened.at(-1)).toBe('clawd-session')
+    expect(w.toasts.at(-1)).toContain('這次 session')
+    expect(w.toasts.at(-1)).toContain('1 次回覆')
+    const pane = await $.ui.mount({ plugin: 'clawd-sidekick', surface: 'desktop', component: 'Pane', requestId: 'clawd-session', props: { bodyColumns: 80 } as never })
+    expect(String((await pane.find({ type: 'Svg' }))?.props.source)).toContain('這次 session · my-app')
+    await $.session.end({ reason: 'other', sessionId: 'this-session' } as never)
+    expect(w.store.get('lastSession:my-app')).toContain('1 次回覆')
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    expect(w.toasts.some(t => t.startsWith('上次在 my-app'))).toBe(true)
+    expect(w.store.has('lastSession:my-app')).toBe(false)
+    await w.clock.settle()
+  })
+
+  test('folded, the band still shows the context, the plan and the reply', async ($, on) => {
+    const w = world(on)
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    await w.clock.settle()
+    await $.command.run({ command: 'clawd', args: 'hide', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    await $.turn.start({ text: '修 bug', turnId: 't1' })
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    expect(await ui.find({ key: 'expand' })).toBeDefined()
+    expect(await ui.find({ text: /42%/ })).toBeDefined()
+    expect(await ui.find({ text: /31%/ })).toBeDefined()
+    expect(await ui.find({ text: /這次回覆/ })).toBeDefined()
+    await w.clock.settle()
   })
 
   test('English when the person asks for it, and /clawd lang switches on the spot', { options: { language: 'en' } }, async ($, on) => {
@@ -765,7 +868,8 @@ describe('the band above the prompt', () => {
     await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
     expect(await ui.find({ text: 'no deadlines' })).toBeDefined()
-    expect(await ui.find({ text: /1 command|0 commands/ })).toBeDefined()
+    // Before the first reply there is nothing to time.
+    expect(await ui.find({ text: /this reply|last reply/ })).toBeUndefined()
     expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toContain('Game room')
     await ui.unmount()
     const switched = await $.command.run({ command: 'clawd', args: 'lang zh', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })

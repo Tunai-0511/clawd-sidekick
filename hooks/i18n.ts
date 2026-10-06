@@ -232,13 +232,10 @@ export type Strings = {
   crewClawd: (cap: string) => string
   forSubagent: (task: string) => string
   gettingReady: string
-  boardEmpty: string
-  board: (deadlines: readonly string[]) => string
   boardTitle: (deadlines: readonly string[]) => string
   noDeadline: string
   calendarEmpty: string
   calendar: (deadline: string) => string
-  lights: Record<Theme, string>
   toys: Record<Theme, string>
   outside: Record<'day' | 'dusk' | 'night', string>
   outsideSpace: string
@@ -251,6 +248,28 @@ export type Strings = {
   holidaySet: (holiday: string) => string
   holidayAuto: (holiday: string) => string
   holidayUsage: string
+  // Lights, the hover cards, the plan's limits, the session's summary
+  lightOff: string
+  lightOn: string
+  lightsSet: (rooms: string, isOn: boolean) => string
+  lightsUsage: string
+  allRooms: string
+  span: (minutes: number) => string
+  resetsIn: (left: string) => string
+  usageWarn: (window: 'five_hour' | 'seven_day', step: number, left: string, at: string, isDirty: boolean) => string
+  usageBubble: (window: 'five_hour' | 'seven_day', step: number) => string
+  sessionTitle: string
+  sessionSince: (clock: string) => string
+  sessionButton: string
+  sessionReplies: (n: number) => string
+  sessionFiles: (n: number) => string
+  sessionCommands: (n: number) => string
+  sessionFailed: (n: number) => string
+  sessionCost: string
+  sessionTop: string
+  sessionQuiet: string
+  sessionLine: (d: { work: string; turns: number; tools: number; files: number; added: number; removed: number; runs: number; failed: number; commits: number; pushes: number; usd: string | null }) => string
+  lastSession: (project: string, line: string) => string
 }
 
 const zh: Strings = {
@@ -521,13 +540,10 @@ const zh: Strings = {
   crewClawd: cap => `${cap} Clawd`,
   forSubagent: task => `替子代理工作：${task}`,
   gettingReady: '準備中',
-  boardEmpty: '布告欄：還沒有截止日（/deadline add 12/24 名稱）',
-  board: deadlines => `布告欄：${deadlines.join('、')}`,
   boardTitle: deadlines => (deadlines.length === 0 ? '布告欄：還沒有截止日（/deadline add 12/24 名稱）' : `布告欄：截止日\n${deadlines.map(d => `· ${d}`).join('\n')}`),
   noDeadline: '沒有截止日',
   calendarEmpty: '日曆：還沒有截止日（/deadline add 12/24 名稱）',
   calendar: deadline => `日曆：${deadline}`,
-  lights: { house: '檯燈：摸一下就亮', beach: '燈塔：摸一下就亮', space: '全像檯燈：摸一下就亮', forest: '營燈：摸一下就亮' },
   toys: {
     house: '大型電玩：有人在玩的時候別擋到螢幕',
     beach: '沙堡：裡面住著一隻小螃蟹',
@@ -544,6 +560,40 @@ const zh: Strings = {
   holidaySet: holiday => `節日佈置固定成${holiday}。/clawd holiday auto 改回跟著日期。`,
   holidayAuto: holiday => `節日跟著日期走，現在是${holiday}。`,
   holidayUsage: '用法：/clawd holiday lunar（農曆新年）、halloween、christmas、none（不佈置），或 auto 跟著日期',
+  lightOff: '💡 關燈',
+  lightOn: '💡 開燈',
+  lightsSet: (rooms, isOn) => `${rooms}${isOn ? '開燈了' : '關燈了'}`,
+  lightsUsage: '用法：/clawd lights on 或 off，後面可以接房間（library、codelab、terminal、web、game），不接就是全部',
+  allRooms: '全部房間',
+  span: minutes => {
+    const days = Math.floor(minutes / 1440)
+    const hours = Math.floor((minutes % 1440) / 60)
+    const mins = minutes % 60
+    if (days > 0) return `${days} 天${hours > 0 ? ` ${hours} 小時` : ''}`
+    if (hours > 0) return `${hours} 小時${mins > 0 ? ` ${mins} 分` : ''}`
+    return `${Math.max(1, mins)} 分`
+  },
+  resetsIn: left => `${left}後重置`,
+  usageWarn: (window, step, left, at, isDirty) => {
+    const name = window === 'five_hour' ? '5 小時額度' : '7 天額度'
+    if (step >= 100) return `${name}用完了，${at}（${left}後）重置。`
+    const tip = step >= 95 ? (isDirty ? '快用完了，先 commit 手上的改動吧。' : '快用完了，留給最要緊的事。') : ''
+    return `${name}已用 ${step}%，${at}（${left}後）重置。${tip}`
+  },
+  usageBubble: (window, step) => `${window === 'five_hour' ? '5h' : '7d'} 額度 ${step}%`,
+  sessionTitle: '這次 session',
+  sessionSince: clock => `${clock} 開始`,
+  sessionButton: '結算',
+  sessionReplies: () => '次回覆',
+  sessionFiles: () => '個檔',
+  sessionCommands: () => '個指令',
+  sessionFailed: n => `${n} 個失敗`,
+  sessionCost: '花費',
+  sessionTop: '改最多的檔',
+  sessionQuiet: '這次 session 還沒做什麼事',
+  sessionLine: d =>
+    `這次 session：${d.work}、${d.turns} 次回覆、${d.tools} 次工具、改 ${d.files} 個檔（+${d.added} −${d.removed}）、跑 ${d.runs} 個指令${d.failed > 0 ? `（${d.failed} 個失敗）` : ''}、${d.commits} 次 commit、${d.pushes} 次 push${d.usd === null ? '' : `、花費 $${d.usd}`}。`,
+  lastSession: (project, line) => `上次在 ${project}：${line}`,
 }
 
 const en: Strings = {
@@ -819,13 +869,10 @@ const en: Strings = {
   crewClawd: cap => `${cap} Clawd`,
   forSubagent: task => `working for a subagent: ${task}`,
   gettingReady: 'getting ready',
-  boardEmpty: 'Board: no deadlines yet (/deadline add 12/24 name)',
-  board: deadlines => `Board: ${deadlines.join(', ')}`,
   boardTitle: deadlines => (deadlines.length === 0 ? 'Board: no deadlines yet (/deadline add 12/24 name)' : `Board: deadlines\n${deadlines.map(d => `· ${d}`).join('\n')}`),
   noDeadline: 'no deadlines',
   calendarEmpty: 'Calendar: no deadlines yet (/deadline add 12/24 name)',
   calendar: deadline => `Calendar: ${deadline}`,
-  lights: { house: 'Lamp: hover to switch it on', beach: 'Lighthouse: hover to light it', space: 'Holo-lamp: hover to switch it on', forest: 'Lantern: hover to light it' },
   toys: {
     house: "Arcade: don't block the screen while someone's playing",
     beach: 'Sandcastle: a little crab lives inside',
@@ -842,6 +889,40 @@ const en: Strings = {
   holidaySet: holiday => `Decorations are set to ${holiday}. /clawd holiday auto follows the date again.`,
   holidayAuto: holiday => `Holidays follow the date: today is ${holiday}.`,
   holidayUsage: 'Usage: /clawd holiday lunar (Lunar New Year), halloween, christmas, none, or auto to follow the date',
+  lightOff: '💡 Lights off',
+  lightOn: '💡 Lights on',
+  lightsSet: (rooms, isOn) => `Lights ${isOn ? 'on' : 'off'}: ${rooms}`,
+  lightsUsage: 'Usage: /clawd lights on or off, then a room (library, codelab, terminal, web, game), or none for all of them',
+  allRooms: 'every room',
+  span: minutes => {
+    const days = Math.floor(minutes / 1440)
+    const hours = Math.floor((minutes % 1440) / 60)
+    const mins = minutes % 60
+    if (days > 0) return `${days}d${hours > 0 ? ` ${hours}h` : ''}`
+    if (hours > 0) return `${hours}h${mins > 0 ? ` ${mins}m` : ''}`
+    return `${Math.max(1, mins)}m`
+  },
+  resetsIn: left => `resets in ${left}`,
+  usageWarn: (window, step, left, at, isDirty) => {
+    const name = window === 'five_hour' ? 'Your 5-hour limit' : 'Your 7-day limit'
+    if (step >= 100) return `${name} is used up. It resets at ${at} (in ${left}).`
+    const tip = step >= 95 ? (isDirty ? ' Nearly out: commit what you have first.' : ' Nearly out: keep it for what matters most.') : ''
+    return `${name} is ${step}% used. It resets at ${at} (in ${left}).${tip}`
+  },
+  usageBubble: (window, step) => `${window === 'five_hour' ? '5h' : '7d'} limit ${step}%`,
+  sessionTitle: 'This session',
+  sessionSince: clock => `since ${clock}`,
+  sessionButton: 'Summary',
+  sessionReplies: n => (n === 1 ? 'reply' : 'replies'),
+  sessionFiles: n => (n === 1 ? 'file' : 'files'),
+  sessionCommands: n => (n === 1 ? 'command' : 'commands'),
+  sessionFailed: n => `${n} failed`,
+  sessionCost: 'cost',
+  sessionTop: 'Most changed',
+  sessionQuiet: 'Nothing done in this session yet',
+  sessionLine: d =>
+    `This session: ${d.work}, ${d.turns} replies, ${d.tools} tool calls, ${d.files} files changed (+${d.added} −${d.removed}), ${d.runs} commands${d.failed > 0 ? ` (${d.failed} failed)` : ''}, ${d.commits} commits, ${d.pushes} pushes${d.usd === null ? '' : `, $${d.usd}`}.`,
+  lastSession: (project, line) => `Last time in ${project}: ${line}`,
 }
 
 const STRINGS: Record<Lang, Strings> = { zh, en }

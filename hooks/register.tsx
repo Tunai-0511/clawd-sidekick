@@ -8,20 +8,22 @@
 // (read off Claude's replies) and frets as your deadlines close in.
 
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, RenderElement } from 'claude-code'
+import type { Elements, EngineInterface, Register, RenderElement } from 'claude-code'
 
 import type { Activity, Changes, Day, Deadline, Doing, Egg, Game, GitState, Hat, Holiday, Life, Neighbor, Pal, Pose, RoomId, SceneActor, SceneProps, Season, Theme, Tier, TimeOfDay, Trophies, Usage } from '../types'
 import { countdown, formatDue, newId, parseDeadline, parseOffset, urgency, URGENCY_COLOR } from './deadline'
 import { langOf, say, type Lang } from './i18n'
-import { actorX, eggOf, layoutFor, ROOMS, SH, SPOT_X, SW, type Spot } from './scene'
-import { doneClawdSvg, miniClawdSvg, sceneSvg, squashClawdSvg } from './scene-svg'
+import { actorTip, actorX, eggOf, layoutFor, ROOMS, SH, SPOT_X, STEP, SW, type Spot } from './scene'
+import { actorHoverSvg, doneClawdSvg, miniClawdSvg, roomHoverSvg, sceneSvg, squashClawdSvg } from './scene-svg'
+import { cameraOf, HOUSE_ROWS, houseCells, signsLine } from './raster'
+import { isSwitched, roomSpans } from './light'
 import { H, W } from './sprite'
-import { THEME_ORDER } from './themes'
+import { THEME_ORDER, THEMES } from './themes'
 import { clawdSvg } from './svg'
 import { EDITING, fileChangeOf, NO_CHANGES, recordCommand, recordFile, relativePath, totals } from './changes'
 import { isTestRun, momentOf, type GitOperation } from './events'
 import { gitColor, isDirty, needsCommit, parseStatus } from './git'
-import { dateOf, dayBefore, duration, emptyDay, favoriteRoom, poseOf, recapLine, recapSvg, ROOM_IDS, streakOf } from './recap'
+import { dateOf, dayBefore, duration, emptyDay, favoriteRoom, poseOf, recapLine, recapSvg, ROOM_IDS, sessionLine, sessionSvg, streakOf, type SessionSummary } from './recap'
 import { holidayOf, seasonOf, zoneOf } from './seasons'
 import {
   emptyLife,
@@ -46,6 +48,7 @@ const PANE = 'clawd'
 const RECAP = 'clawd-recap'
 const CHANGES_PANE = 'clawd-changes'
 const TROPHY_PANE = 'clawd-trophies'
+const SESSION_PANE = 'clawd-session'
 
 /** What the spinner says the turn is doing: in English whatever Clawd speaks, beside Claude Code's own `Working…`. */
 const MODE_WORDS = { requesting: 'requesting', responding: 'responding', thinking: 'thinking', 'tool-input': 'preparing a tool', 'tool-use': 'using tools' } as const
@@ -76,6 +79,8 @@ const openRowsAtom = atom({ plugin: 'clawd-sidekick', key: 'openRows' } as const
 const compactingAtom = atom({ plugin: 'clawd-sidekick', key: 'compacting' } as const, false)
 const seasonPickAtom = atom({ plugin: 'clawd-sidekick', key: 'seasonPick' } as const, 'auto')
 const holidayPickAtom = atom({ plugin: 'clawd-sidekick', key: 'holidayPick' } as const, 'auto')
+const darkRoomsAtom = atom({ plugin: 'clawd-sidekick', key: 'darkRooms' } as const, [])
+const sessionAtom = atom({ plugin: 'clawd-sidekick', key: 'session' } as const, { startedAt: 0, totals: emptyDay('') })
 
 /**
  * What features since removed kept on this machine: the sound and band
@@ -99,6 +104,8 @@ const usageAtom = atom({ plugin: 'clawd-sidekick', key: 'usage' } as const, {
   contextPercent: null,
   fiveHour: null,
   sevenDay: null,
+  fiveHourResetsAt: null,
+  sevenDayResetsAt: null,
   usd: null,
   turnStartedAt: 0,
   tools: 0,
@@ -237,6 +244,10 @@ const BREAK_AFTER = 50 * 60_000
 const STRETCH_EVERY = 10 * 60_000
 /** This session's id, under which it tells the others what it is up to. */
 let sessionId = ''
+/** Where the terminal house is drawn, for the timer that paints its next frame; unset once it is gone. */
+let rasterSite: { requestId: string; columns: number; props: SceneProps } | undefined
+let rasterFrame = 0
+let blits: { cancel: () => void } | undefined
 let sharedAs = ''
 let sharedAt = 0
 /** When each tool call still running began, for its row's clock. */
@@ -359,6 +370,12 @@ async function logDay($: Engine, change: (day: Day) => void, lifeChange?: (life:
   change(day)
   await $.store.set(`day:${date}`, day)
   await update($, todayAtom, () => day)
+  // This session keeps the same figures, for its summary.
+  await update($, sessionAtom, s => {
+    const totals: Day = { ...s.totals, rooms: { ...s.totals.rooms } }
+    change(totals)
+    return { ...s, totals }
+  })
   await changeLife($, life => {
     for (const key of COUNTERS) life[key] += day[key] - before[key]
     if (before.turns + before.tools === 0 && day.turns + day.tools > 0 && life.lastDay !== date) {
@@ -498,17 +515,74 @@ async function refreshUsage($: Engine, isForced = false): Promise<void> {
     const usage = await $.session.usage()
     const model = await $.session.model()
     const window = (kind: string): number | null => usage.rateLimits.find(r => r.kind === kind)?.percentUsed ?? null
-    await update($, usageAtom, (u): Usage => ({
+    const resets = (kind: string): number | null => {
+      const at = Date.parse(usage.rateLimits.find(r => r.kind === kind)?.resetsAt ?? '')
+      return Number.isNaN(at) ? null : at
+    }
+    const next = await update($, usageAtom, (u): Usage => ({
       ...u,
       model: modelName(model),
       contextPercent: usage.context.percent ?? null,
       fiveHour: window('five_hour'),
       sevenDay: window('seven_day'),
+      fiveHourResetsAt: resets('five_hour'),
+      sevenDayResetsAt: resets('seven_day'),
       usd: usage.cost?.usd ?? null,
     }))
+    await guardUsage($, next)
   } catch {
     // The figures wait for the next tick.
   }
+}
+
+// ── The plan's limits ────────────────────────────────────────────────────
+
+/** Where a window's use earns a word from Clawd: most of it gone, nearly all, all. */
+const LIMIT_STEPS = [100, 95, 80] as const
+
+/**
+ * Past 80%, 95% and 100% of the 5-hour or the 7-day window, Clawd says so
+ * once (in a toast, and on his bubble): how much is gone, when it starts
+ * over and, nearly out with work uncommitted, to commit first. Once a window
+ * across every session: each step's word is kept in the store by window.
+ */
+async function guardUsage($: Engine, usage: Usage): Promise<void> {
+  const windows = [
+    ['five_hour', usage.fiveHour, usage.fiveHourResetsAt],
+    ['seven_day', usage.sevenDay, usage.sevenDayResetsAt],
+  ] as const
+  for (const [window, percent, resetsAt] of windows) {
+    if (percent === null) continue
+    const step = LIMIT_STEPS.find(s => percent >= s)
+    if (step === undefined) continue
+    const key = `${window}:${resetsAt ?? 'unknown'}:${step}`
+    const warned = ((await $.store.get('usageWarned')) as string[] | undefined) ?? []
+    if (warned.includes(key)) continue
+    await $.store.set('usageWarned', [...warned, key].slice(-20))
+    const now = await $.clock.now()
+    const offset = await read($, offsetAtom)
+    const git = await read($, gitAtom)
+    const w = say(lang)
+    const left = resetsAt === null ? '?' : w.span(Math.max(1, Math.round((resetsAt - now) / 60_000)))
+    const at = resetsAt === null ? '?' : formatClock(resetsAt, offset, now)
+    $.ui.toast(w.usageWarn(window, step, left, at, git !== null && isDirty(git)), { timeoutMs: 10_000 })
+    await flash($, step >= 95 ? 'panic' : 'oops', w.usageBubble(window, step), 6000, () => settle($))
+  }
+}
+
+/** A moment by the person's clock: '15:40', with the date when it is not today. */
+function formatClock(at: number, offset: number, now: number): string {
+  const local = new Date(at + offset * 60_000)
+  const clock = local.toISOString().slice(11, 16)
+  const isToday = local.toISOString().slice(0, 10) === new Date(now + offset * 60_000).toISOString().slice(0, 10)
+  return isToday ? clock : `${local.getUTCMonth() + 1}/${local.getUTCDate()} ${clock}`
+}
+
+/** How long until a window starts over, for the band: shown once most of it is gone. */
+function resetNote(percent: number | null, resetsAt: number | null, now: number, talk: Lang): string {
+  if (percent === null || percent < 70 || resetsAt === null || resetsAt <= now) return ''
+  const w = say(talk)
+  return ` · ${w.resetsIn(w.span(Math.round((resetsAt - now) / 60_000)))}`
 }
 
 async function count($: Engine, field: 'tools' | 'edits' | 'runs'): Promise<void> {
@@ -531,6 +605,8 @@ async function load($: Engine): Promise<void> {
   await update($, deadlinesAtom, () => deadlines)
   await update($, collapsedAtom, () => isCollapsed)
   await update($, petsAtom, () => pets)
+  const dark = ((await $.store.get('darkRooms')) as RoomId[] | undefined) ?? []
+  await update($, darkRoomsAtom, () => dark.filter(id => (ROOM_IDS as readonly string[]).includes(id)))
   const names = ((await $.store.get('names')) as Record<string, string> | undefined) ?? {}
   const birthday = String((await $.store.get('birthday')) ?? '')
   await update($, namesAtom, () => ({ ...names }))
@@ -621,6 +697,142 @@ async function systemZone($: Engine): Promise<string | undefined> {
 }
 
 /** Moves the Clawds to another scene; `next` takes the one after the current. */
+// ── What the pointer finds over the Desktop house ─────────────────────────
+
+/**
+ * Drawn by the band itself, so nothing in the picture reloads: over each
+ * room an unseen strip that, under the pointer, lights the room up and shows
+ * a card (what the room is for, what it holds now, its light switch), and
+ * over each Clawd standing still a strip with hearts and his card (what he
+ * is doing, and a pat). The band lays out in columns of eight pixels; the
+ * picture spans them all, so a scene pixel is `width / SW` columns.
+ */
+function houseZones($: Engine, ui: Elements['vscode'], s: SceneProps, o: { width: number; height: number; now: number; git: GitState | null }): RenderElement[] {
+  const { Box, Text, Button, Svg } = ui
+  const w = say(s.lang)
+  const art = THEMES[s.theme]
+  const cells = (x: number): number => Math.max(0, Math.min(o.width, Math.round((x * o.width) / SW)))
+  const pixels = (cell: number): number => (cell * SW) / o.width
+  const card = (lines: RenderElement[], buttons: RenderElement[], left: number, zoneWidth: number): RenderElement => {
+    const cardWidth = Math.min(o.width, Math.max(zoneWidth, 40))
+    // A card stays inside the band: anchored left, unless that would run off the right edge.
+    const side = left + cardWidth > o.width ? { right: 0 } : { left: 0 }
+    return (
+      <Box position="absolute" top={0} {...side} width={cardWidth} display="none" hover={{ display: 'flex' }} flexDirection="column" backgroundColor="#1F1E1D" borderStyle="round" borderColor={ORANGE} paddingX={1}>
+        {lines}
+        {buttons.length === 0 ? null : (
+          <Box flexDirection="row" gap={1}>
+            {buttons}
+          </Box>
+        )}
+      </Box>
+    )
+  }
+  const glow = (source: string, zoneWidth: number): RenderElement => (
+    <Box position="absolute" top={0} left={0} display="none" hover={{ display: 'flex' }}>
+      <Svg source={source} alt="" width={zoneWidth * CELL_PX} height={o.height} />
+    </Box>
+  )
+  const zones: RenderElement[] = []
+  for (const span of roomSpans()) {
+    const left = cells(span.x0)
+    const zoneWidth = cells(span.x1) - left
+    if (zoneWidth <= 0) continue
+    const name = w.rooms[s.theme][span.id]
+    const info: Record<RoomId, string> = {
+      library: w.memoryTip(s.theme, s.memory),
+      codelab: s.notes.length === 0 ? w.calendarEmpty : w.boardTitle(s.notes.slice(0, 4).map(n => n.text)),
+      terminal: o.git === null ? '' : w.gitLine(o.git.branch, o.git.ahead, o.git.behind, o.git.changed + o.git.untracked),
+      web: s.theme === 'space' ? w.outsideSpace : w.outside[s.time],
+      game: s.medals.length === 0 ? w.toys[s.theme] : `${w.toys[s.theme]}\n${w.medalsTip(s.trophyCount[0], s.trophyCount[1])}`,
+    }
+    const isDark = s.dark.includes(span.id)
+    const hasSwitch = art.glows.some(g => g.room === span.id && isSwitched(g))
+    const lines = [
+      <Text color={ORANGE} bold>
+        {name}
+      </Text>,
+      <Text dimColor wrap="wrap">
+        {w.roomPurpose[span.id]}
+      </Text>,
+      ...(info[span.id] === '' ? [] : [<Text wrap="wrap">{info[span.id]}</Text>]),
+    ]
+    const buttons = hasSwitch ? [<Button key={`light-${span.id}`} label={isDark ? w.lightOn : w.lightOff} onPress={() => toggleLight($, span.id)} />] : []
+    zones.push(
+      <Box key={`room-${span.id}`} position="absolute" top={0} bottom={0} left={left} width={zoneWidth}>
+        {glow(roomHoverSvg(s, pixels(left), pixels(zoneWidth)), zoneWidth)}
+        {card(lines, buttons, left, zoneWidth)}
+      </Box>,
+    )
+  }
+  // A Clawd on his way somewhere has his strip where he is going.
+  for (const a of s.actors) {
+    const left = cells(a.toX - 4)
+    const zoneWidth = cells(a.toX + 20) - left
+    if (zoneWidth <= 0) continue
+    const lines = [<Text wrap="wrap">{actorTip(a, s)}</Text>]
+    const buttons = a.neighbor === undefined ? [<Button key={`pet-${a.id}`} label={w.pet} onPress={() => onPet($, a.id)} />] : []
+    zones.push(
+      <Box key={`clawd-${a.id}`} position="absolute" top={0} bottom={0} left={left} width={zoneWidth}>
+        {glow(actorHoverSvg(a.toX, pixels(left), pixels(zoneWidth)), zoneWidth)}
+        {card(lines, buttons, left, zoneWidth)}
+      </Box>,
+    )
+  }
+  return zones
+}
+
+/** The terminal house's next frame, painted in place; nothing to do while no terminal shows it. */
+async function blitHouse($: Engine): Promise<void> {
+  const site = rasterSite
+  if (site === undefined) return
+  rasterFrame++
+  try {
+    const result = await $.ui.blit({ requestId: site.requestId, key: 'house', cells: houseCells(site.props, rasterFrame, await $.clock.now(), site.columns) })
+    if (result.deny !== undefined && rasterSite === site) stopHouse()
+  } catch {
+    if (rasterSite === site) stopHouse()
+  }
+}
+
+/** Nothing shows the terminal house: no more frames until it is drawn again. */
+function stopHouse(): void {
+  rasterSite = undefined
+  blits?.cancel()
+  blits = undefined
+}
+
+// ── Lights ───────────────────────────────────────────────────────────────
+
+/** Switches rooms' lights on or off, in every scene, and keeps it. */
+async function setLights($: Engine, rooms: readonly RoomId[], isOn: boolean): Promise<void> {
+  const dark = await update($, darkRoomsAtom, list => (isOn ? list.filter(id => !rooms.includes(id)) : [...new Set([...list, ...rooms])]))
+  await $.store.set('darkRooms', dark)
+}
+
+async function toggleLight($: Engine, room: RoomId): Promise<void> {
+  await setLights($, [room], (await read($, darkRoomsAtom)).includes(room))
+}
+
+// ── The session's summary ────────────────────────────────────────────────
+
+/** This session so far: its figures, the files it changed and the commands that failed, and its cost. */
+async function summaryOf($: Engine): Promise<SessionSummary> {
+  const [session, changes, usage, offset] = await Promise.all([read($, sessionAtom), read($, changesAtom), read($, usageAtom), read($, offsetAtom)])
+  const root = await $.session.root()
+  const sum = totals(changes)
+  return {
+    totals: session.totals,
+    startedAt: session.startedAt,
+    offset,
+    files: changes.files.map(f => ({ path: relativePath(f.path, root), added: f.added, removed: f.removed })),
+    added: sum.added,
+    removed: sum.removed,
+    failed: sum.failed,
+    usd: usage.usd,
+  }
+}
+
 async function setTheme($: Engine, choice: Theme | 'next'): Promise<Theme> {
   const current = await read($, themeAtom)
   const theme = choice === 'next' ? (THEME_ORDER[(THEME_ORDER.indexOf(current) + 1) % THEME_ORDER.length] ?? 'house') : choice
@@ -894,7 +1106,7 @@ export const register: Register = (on, options) => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
-    const [doing, deadlines, isCollapsed, actors, usage, game, offset, talk, theme, zone, seasonPick, holidayPick, trophies, neighbors, egg, birthday, names, git] = await Promise.all([
+    const [doing, deadlines, isCollapsed, actors, usage, game, offset, talk, theme, zone, seasonPick, holidayPick, trophies, neighbors, egg, birthday, names, git, dark] = await Promise.all([
       read($, activity),
       read($, deadlinesAtom),
       read($, collapsedAtom),
@@ -913,6 +1125,7 @@ export const register: Register = (on, options) => {
       read($, birthdayAtom),
       read($, namesAtom),
       read($, gitAtom),
+      read($, darkRoomsAtom),
       read($, nowAtom),
     ])
     const w = say(talk)
@@ -922,14 +1135,42 @@ export const register: Register = (on, options) => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const width = e.props.bodyColumns
 
+    const level = (percent: number | null): string | undefined =>
+      percent === null ? undefined : percent >= 80 ? '#E5484D' : percent >= 50 ? '#F5C542' : '#4CB363'
+    const bar = (percent: number): string => {
+      const filled = Math.round(percent / 20)
+      return '▰'.repeat(filled) + '▱'.repeat(5 - filled)
+    }
+    const stat = (label: string, value: string, color?: string): RenderElement => (
+      <Text>
+        <Text dimColor>{`${label} `}</Text>
+        <Text color={color}>{value}</Text>
+      </Text>
+    )
+    const elapsed = isWorking ? now - usage.turnStartedAt : lastTurnMs
+    const clockText = `${Math.floor(elapsed / 60_000)}:${String(Math.floor((elapsed % 60_000) / 1000)).padStart(2, '0')}`
+    // Before the first reply there is nothing to time.
+    const hasReply = isWorking || lastTurnMs > 0
+    const limit = (label: string, percent: number | null, resetsAt: number | null): RenderElement | null =>
+      percent === null ? null : stat(label, `${Math.round(percent)}%${resetNote(percent, resetsAt, now, talk)}`, level(percent))
+    const gitText = git === null ? null : (
+      <Text color={gitColor(git, dirtySince, now)} dimColor={gitColor(git, dirtySince, now) === undefined}>
+        {w.gitLine(git.branch, git.ahead, git.behind, git.changed + git.untracked)}
+      </Text>
+    )
+    const deadlineText =
+      nearest === undefined ? null : (
+        <Text color={URGENCY_COLOR[urgency(nearest.due, now)]} wrap="truncate-end">
+          {w.due(clip(nearest.title, 10), countdown(nearest.due, now, talk))}
+        </Text>
+      )
+
     // The terminal folds the band when the house cannot fit; the desktop scales it instead.
     const isCramped = e.surface === 'terminal' && (width < 70 || e.props.maxRows < SH / 2 + 3)
     const main = actors.find(a => a.cap === null)
     const langButton = <Button key="lang" label={w.otherLanguage} onPress={() => setLang($, talk === 'zh' ? 'en' : 'zh')} />
     if (isCollapsed || isCramped) {
       const now_ = doing.label && doing.label !== w.sleepy ? doing.label : w.doings[main?.doing ?? 'idle']
-      const summary = [`${names.main ?? 'Clawd'} · ${now_}`]
-      if (nearest !== undefined) summary.push(w.due(nearest.title, countdown(nearest.due, now, talk)))
       let face: RenderElement
       if (e.surface === 'terminal') {
         face = <Text color={ORANGE}>▐▛███▜▌</Text>
@@ -937,10 +1178,16 @@ export const register: Register = (on, options) => {
         const { Svg } = $.ui.resolve(e)
         face = <Svg source={miniClawdSvg(main?.doing ?? 'idle')} alt="Clawd" width={36} height={24} />
       }
+      // Folded, the band keeps what matters at a glance: what he's doing, the context and the plan, this reply, git, the next deadline.
       return (
-        <Box flexDirection="row" gap={1} alignItems="center">
+        <Box flexDirection="row" columnGap={2} alignItems="center" flexWrap="wrap">
           {face}
-          <Text wrap="truncate-end">{summary.join(' · ')}</Text>
+          <Text color={ORANGE} bold wrap="truncate-end">{`${names.main ?? 'Clawd'} · ${now_}`}</Text>
+          {usage.contextPercent === null ? null : stat('ctx', `${Math.round(usage.contextPercent)}%`, level(usage.contextPercent))}
+          {limit('5h', usage.fiveHour, usage.fiveHourResetsAt)}
+          {hasReply ? stat(isWorking ? w.turn : w.lastTurn, clockText) : null}
+          {gitText}
+          {deadlineText}
           <Box flexGrow={1} />
           {isCollapsed ? <Button key="expand" label={w.expand} variant="primary" onPress={() => setCollapsed($, false)} /> : null}
           {e.surface === 'terminal' ? null : langButton}
@@ -974,39 +1221,44 @@ export const register: Register = (on, options) => {
       egg,
       isBirthday: birthday !== '' && monthDay(now, offset) === birthday,
       names,
+      dark,
     }
     let house: RenderElement
     if (e.surface === 'terminal') {
-      const { Client } = $.ui.resolve(e)
-      house = <Client key="house" module="./scene-client.tsx" props={scene} width="100%" height={SH / 2 + 1} />
+      const { Raster } = $.ui.resolve(e)
+      const columns = Math.max(1, Math.min(width, SW))
+      // The timer repaints it from here on, a frame a tick, until it is gone.
+      rasterSite = { requestId: e.requestId, columns, props: scene }
+      blits ??= $.clock.every(STEP, () => void blitHouse($))
+      house = (
+        <Box flexDirection="column">
+          <Raster key="house" columns={columns} rows={HOUSE_ROWS} cells={houseCells(scene, rasterFrame, now, columns)} />
+          <Text dimColor wrap="truncate">
+            {signsLine(cameraOf(scene, columns, now), columns, talk, theme)}
+          </Text>
+        </Box>
+      )
     } else {
       const { Svg } = $.ui.resolve(e)
       const frame = Math.round(width * CELL_PX)
-      house = (
-        <Svg
-          source={sceneSvg(scene, now)}
-          alt={w.houseAlt(doing.label || w.readingInLibrary)}
-          isInteractive
-          width={frame}
-          height={Math.round((frame * SH) / SW)}
-        />
-      )
+      const height = Math.round((frame * SH) / SW)
+      // An image, not a frame: a new drawing takes the old one's place without a blink.
+      const art = <Svg key="art" source={sceneSvg(scene, now)} alt={w.houseAlt(doing.label || w.readingInLibrary)} width={frame} height={height} />
+      house =
+        e.surface === 'mobile' ? (
+          art
+        ) : (
+          <Box key="house" position="relative" flexDirection="column">
+            {art}
+            {houseZones($, $.ui.resolve(e) as unknown as Elements['vscode'], scene, { width, height, now, git })}
+          </Box>
+        )
     }
 
-    const level = (percent: number | null): string | undefined =>
-      percent === null ? undefined : percent >= 80 ? '#E5484D' : percent >= 50 ? '#F5C542' : '#4CB363'
-    const bar = (percent: number): string => {
-      const filled = Math.round(percent / 20)
-      return '▰'.repeat(filled) + '▱'.repeat(5 - filled)
-    }
-    const elapsed = isWorking ? now - usage.turnStartedAt : lastTurnMs
-    const clockText = `${Math.floor(elapsed / 60_000)}:${String(Math.floor((elapsed % 60_000) / 1000)).padStart(2, '0')}`
-    const stat = (label: string, value: string, color?: string): RenderElement => (
-      <Text>
-        <Text dimColor>{`${label} `}</Text>
-        <Text color={color}>{value}</Text>
-      </Text>
-    )
+    // Other sessions on this machine, one name a project however many there are.
+    const projects = new Map<string, number>()
+    for (const n of neighbors) projects.set(n.project, (projects.get(n.project) ?? 0) + 1)
+    const neighborText = [...projects].map(([project, n]) => (n > 1 ? `${project} ×${n}` : project)).join(talk === 'zh' ? '、' : ', ')
 
     return (
       <Box flexDirection="column">
@@ -1015,35 +1267,29 @@ export const register: Register = (on, options) => {
           <Text color={ORANGE} bold wrap="truncate-end">
             {`「${doing.label || (isWorking ? w.thinking : w.hello)}」`}
           </Text>
-          {git === null ? null : (
-            <Text color={gitColor(git, dirtySince, now)} dimColor={gitColor(git, dirtySince, now) === undefined}>
-              {w.gitLine(git.branch, git.ahead, git.behind, git.changed + git.untracked)}
-            </Text>
-          )}
-          {neighbors.length === 0 ? null : stat(w.neighborsLabel, neighbors.map(n => n.project).join(talk === 'zh' ? '、' : ', '))}
+          {gitText}
+          {neighbors.length === 0 ? null : stat(w.neighborsLabel, neighborText)}
           {usage.model ? <Text dimColor>{usage.model}</Text> : null}
           {usage.contextPercent === null ? null : stat('ctx', `${bar(usage.contextPercent)} ${Math.round(usage.contextPercent)}%`, level(usage.contextPercent))}
-          {usage.fiveHour === null ? null : stat('5h', `${Math.round(usage.fiveHour)}%`, level(usage.fiveHour))}
-          {usage.sevenDay === null ? null : stat('7d', `${Math.round(usage.sevenDay)}%`, level(usage.sevenDay))}
+          {limit('5h', usage.fiveHour, usage.fiveHourResetsAt)}
+          {limit('7d', usage.sevenDay, usage.sevenDayResetsAt)}
           {usage.usd === null ? null : stat('$', usage.usd.toFixed(2))}
           {/* One group, so it reads as one thing: how long Claude has been on your latest message (or took on the last), and what it did there. */}
-          <Text>
-            <Text dimColor>{`${isWorking ? w.turn : w.lastTurn} `}</Text>
-            {clockText}
-            <Text dimColor>{` · ${w.tools} `}</Text>
-            {String(usage.tools)}
-            <Text dimColor>{` · ${w.edited} `}</Text>
-            {w.files(usage.edits)}
-            <Text dimColor>{` · ${w.ran} `}</Text>
-            {w.commands(usage.runs)}
-          </Text>
+          {hasReply ? (
+            <Text>
+              <Text dimColor>{`${isWorking ? w.turn : w.lastTurn} `}</Text>
+              {clockText}
+              <Text dimColor>{` · ${w.tools} `}</Text>
+              {String(usage.tools)}
+              <Text dimColor>{` · ${w.edited} `}</Text>
+              {w.files(usage.edits)}
+              <Text dimColor>{` · ${w.ran} `}</Text>
+              {w.commands(usage.runs)}
+            </Text>
+          ) : null}
         </Box>
         <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
-          {nearest === undefined ? <Text dimColor>{w.noDeadline}</Text> : (
-            <Text color={URGENCY_COLOR[urgency(nearest.due, now)]} wrap="truncate-end">
-              {` ${w.due(clip(nearest.title, 10), countdown(nearest.due, now, talk))}`}
-            </Text>
-          )}
+          {deadlineText ?? <Text dimColor>{w.noDeadline}</Text>}
           <Box flexGrow={1} />
           <Button key="panel" label={w.list} hotkey="l" onPress={() => $.ui.open({ id: PANE, title: w.paneTitle })} />
           {e.surface === 'terminal' ? null : <Button key="pet" label={w.pet} onPress={() => onPet($, 'main')} />}
@@ -1236,6 +1482,7 @@ export const register: Register = (on, options) => {
             <Button key="recap" label={w.recapButton} hotkey="r" onPress={() => $.ui.open({ id: RECAP, title: w.recapPaneTitle })} />
             <Button key="trophies" label={w.trophiesButton} hotkey="t" onPress={() => $.ui.open({ id: TROPHY_PANE, title: w.trophiesTitle })} />
             <Button key="changes" label={w.changesButton} hotkey="c" onPress={() => $.ui.open({ id: CHANGES_PANE, title: w.changesTitle })} />
+            <Button key="session" label={w.sessionButton} hotkey="u" onPress={() => $.ui.open({ id: SESSION_PANE, title: w.sessionTitle })} />
           </Box>
         </Box>
 
@@ -1355,6 +1602,37 @@ export const register: Register = (on, options) => {
     )
   })
 
+  on('ui.render', { component: 'Pane', requestId: SESSION_PANE }, async ($, e) => {
+    const [talk, project] = await Promise.all([read($, langAtom), read($, projectAtom), read($, sessionAtom), read($, changesAtom), read($, usageAtom)])
+    const summary = await summaryOf($)
+    const w = say(talk)
+    const { Box, Text } = $.ui.resolve(e)
+    if (e.surface !== 'terminal') {
+      const { Svg } = $.ui.resolve(e)
+      const width = Math.min(720, Math.max(360, Math.round(e.props.bodyColumns * CELL_PX)))
+      return <Svg source={sessionSvg(summary, talk, project)} alt={sessionLine(summary, talk)} width={width} height={Math.round((width * 140) / 240)} />
+    }
+    const top = [...summary.files].sort((a, b) => b.added + b.removed - (a.added + a.removed)).slice(0, 6)
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Text color={ORANGE} bold>{`── ${w.sessionTitle}${project === '' ? '' : ` · ${project}`} ──`}</Text>
+        <Text wrap="wrap">{sessionLine(summary, talk)}</Text>
+        {top.length === 0 ? null : (
+          <Box flexDirection="column">
+            <Text dimColor>{w.sessionTop}</Text>
+            {top.map(f => (
+              <Box flexDirection="row" gap={1}>
+                <Text wrap="truncate-start">{f.path}</Text>
+                <Text color="#4CB363">{`+${f.added}`}</Text>
+                <Text color="#E5484D">{`−${f.removed}`}</Text>
+              </Box>
+            ))}
+          </Box>
+        )}
+      </Box>
+    )
+  })
+
   on('ui.render', { component: 'Pane', requestId: RECAP }, async ($, e) => {
     const [talk, theme, names] = await Promise.all([read($, langAtom), read($, themeAtom), read($, namesAtom), read($, todayAtom)])
     const { today, week, streak } = await readWeek($)
@@ -1434,6 +1712,22 @@ export const register: Register = (on, options) => {
     const ending = sessionId
     // Nothing said after this point: a turn still winding down must not bring the word back.
     sessionId = ''
+    // The session's summary: said now, and kept for the next session in this project.
+    try {
+      const summary = await summaryOf($)
+      if (summary.totals.turns + summary.totals.tools > 0) {
+        const line = sessionLine(summary, lang)
+        await $.store.set(`lastSession:${await read($, projectAtom)}`, line)
+        $.ui.toast(line, { timeoutMs: 10_000 })
+      }
+      // After a /clear the process goes on, a new conversation with figures of its own.
+      if (e.reason === 'clear') {
+        const now = await $.clock.now()
+        await update($, sessionAtom, () => ({ startedAt: now, totals: emptyDay(dateOf(now, 0)) }))
+      }
+    } catch {
+      // Ending goes ahead without it.
+    }
     if (ending !== '') {
       try {
         await $.store.delete(`presence:${ending}`)
@@ -1470,6 +1764,17 @@ export const register: Register = (on, options) => {
     await update($, langAtom, () => lang)
     await loadToday($)
     await changeLife($, () => {})
+    // The session's own figures start here; a reload keeps them.
+    const begun = await $.clock.now()
+    const offsetNow = await read($, offsetAtom)
+    await update($, sessionAtom, s => (s.startedAt === 0 ? { startedAt: begun, totals: emptyDay(dateOf(begun, offsetNow)) } : s))
+    // What the last session in this project came to, once.
+    const project = await read($, projectAtom)
+    const last = (await $.store.get(`lastSession:${project}`)) as string | undefined
+    if (typeof last === 'string' && last !== '') {
+      await $.store.delete(`lastSession:${project}`)
+      $.ui.toast(say(lang).lastSession(project, last), { timeoutMs: 8000 })
+    }
     sessionId = await $.session.id()
     await readGit($, true)
     await sharePresence($)
@@ -1574,6 +1879,20 @@ export const register: Register = (on, options) => {
       await $.ui.open({ id: RECAP, title: say(lang).recapPaneTitle })
       const { today, streak } = await readWeek($)
       return answer($, recapLine(today, streak, lang))
+    }
+    if (arg === 'summary' || arg === 'session' || arg === '結算') {
+      await $.ui.open({ id: SESSION_PANE, title: say(lang).sessionTitle })
+      return answer($, sessionLine(await summaryOf($), lang))
+    }
+    if (arg === 'lights' || arg === 'light' || arg === '燈') {
+      const words = say(lang)
+      const [, onOff = '', room = ''] = e.args.trim().split(/\s+/)
+      const isOn = onOff === 'on' || onOff === '開' ? true : onOff === 'off' || onOff === '關' ? false : undefined
+      const rooms = room === '' || room === 'all' ? ROOM_IDS : ROOM_IDS.filter(id => id === room.toLowerCase())
+      if (isOn === undefined || rooms.length === 0) return answer($, words.lightsUsage)
+      await setLights($, rooms, isOn)
+      const theme = await read($, themeAtom)
+      return answer($, words.lightsSet(rooms.length === ROOM_IDS.length ? words.allRooms : words.rooms[theme][rooms[0]!], isOn))
     }
     if (arg === 'hide') {
       await setCollapsed($, true)

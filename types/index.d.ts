@@ -145,6 +145,8 @@ export type SceneProps = {
   names: Record<string, string>
   season: Season
   holiday: Holiday
+  /** The rooms whose lights the person switched off. */
+  dark: RoomId[]
 }
 
 /** The library, the code lab, the terminal room, the lookout and the game room, in every scene. */
@@ -275,6 +277,9 @@ export type Usage = {
   contextPercent: number | null
   fiveHour: number | null
   sevenDay: number | null
+  /** When each plan window starts over, UTC milliseconds; null when not known. */
+  fiveHourResetsAt: number | null
+  sevenDayResetsAt: number | null
   usd: number | null
   turnStartedAt: number
   tools: number
@@ -323,6 +328,10 @@ declare module 'claude-code' {
       openRows: string[]
       /** True while the conversation is being compacted, for the spinner's Clawd. */
       compacting: boolean
+      /** The rooms whose lights are off, in every scene. */
+      darkRooms: RoomId[]
+      /** This session so far, for its summary: when it began, and its figures as a day's. */
+      session: { startedAt: number; totals: Day }
     }
   }
 }
