@@ -3,7 +3,7 @@
 // falling things into each frame; the SVG lets them fall on their own with
 // SMIL, so they cost no redraws.
 
-import type { SceneProps, Theme } from '../types'
+import type { SceneProps, Theme, Tier } from '../types'
 import { C, hash, px, rect, SH, SW, type Box, type Grid } from './pixels'
 import type { Part } from './themes'
 
@@ -27,6 +27,28 @@ export function fallingOf(s: SceneProps): Falling {
 
 const LANTERNS = [27, 112, 200, 240]
 const PUMPKINS = [37, 84, 166, 248]
+
+/** Where the medals hang: under the game room's bunting, in every scene. */
+export const MEDAL_BOX: Box = { x: 190, y: 5, w: 62, h: 6 }
+
+const MEDAL_COLOR: Record<Tier, readonly [number, number]> = {
+  bronze: [C.bronze, C.bronzeHi],
+  silver: [C.light, C.white],
+  gold: [C.gold, C.ember],
+  legend: [C.magenta, C.cyan],
+}
+
+/** A medal for each trophy family reached, best first: a ribbon and a disc with a glint. */
+function drawMedals(g: Grid, medals: readonly Tier[]): void {
+  medals.slice(0, 10).forEach((tier, i) => {
+    const x = MEDAL_BOX.x + 1 + i * 6
+    const [disc, glint] = MEDAL_COLOR[tier]
+    const ribbon = i % 2 === 0 ? C.red : C.blue
+    rect(g, x + 1, 6, 1, 2, ribbon)
+    rect(g, x, 8, 3, 3, disc)
+    px(g, x, 8, glint)
+  })
+}
 
 /** Decorations drawn over the scene and under the games and the Clawds. */
 export function decorate(g: Grid, t: number, s: SceneProps): void {
@@ -71,6 +93,8 @@ export function decorate(g: Grid, t: number, s: SceneProps): void {
     case 'none':
       break
   }
+  // Last, so a holiday's lanterns never hide what was earned.
+  drawMedals(g, s.medals)
 }
 
 /** The decorations that move: the Christmas lights. */

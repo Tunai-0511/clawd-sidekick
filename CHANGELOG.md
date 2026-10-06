@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.0
+
+- **Trophies**: 79 goals in 21 families, most in four tiers (bronze, silver, gold, legendary), from a first commit to a hundred days in a row, a million tool calls, a sixteen-hour day or a three-hour turn. Each family reached hangs a medal under the game room's bunting, in every scene. Rewards: nine hats for the main Clawd, three pals who walk the floor (a cat, an owl, a little crab), and a golden stamp and seal for commits and pushes. `/clawd trophies` lists them all with your progress; `/clawd hat` and `/clawd pal` choose. The days kept since 0.10.0 count from the start.
+- The holiday hats are drawn from the same table as the new hats; a picked hat stays on over the holidays, an automatic one makes way for the Santa and witch hats.
+
 ## 0.10.2
 
 - The spinner's line and the standing-by line stay in English whatever Clawd speaks, since they sit beside Claude Code's own words (`Working…`, `? for shortcuts`).

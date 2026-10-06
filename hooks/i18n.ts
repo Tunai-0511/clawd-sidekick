@@ -3,6 +3,9 @@
 // `say(lang)` answers one table; each entry is a string or a small function
 // of what goes in it, so word order stays each language's own.
 
+import type { Hat, Pal, Tier } from '../types'
+import type { FamilyId, Unit } from './trophies'
+
 export type Lang = 'zh' | 'en'
 
 export type RoomId = 'library' | 'codelab' | 'terminal' | 'web' | 'game'
@@ -140,6 +143,35 @@ export type Strings = {
   recapWeek: string
   recapStreak: (days: number) => string
   recapLine: (d: { turns: number; work: string; tools: number; edits: number; passed: number; failed: number; commits: number; pushes: number; streak: number }) => string
+  // Trophies
+  tiers: Record<Tier, string>
+  families: Record<FamilyId, string>
+  hats: Record<Hat, string>
+  pals: Record<Pal, string>
+  goldens: Record<'stamp' | 'seal', string>
+  /** A progress figure in its unit: a count, days, hours or minutes. */
+  amount: (unit: Unit, value: number) => string
+  unlocked: (trophy: string) => string
+  unlockedMany: (count: number) => string
+  brings: (reward: string) => string
+  trophiesTitle: string
+  trophiesButton: string
+  trophiesCount: (got: number, total: number) => string
+  trophyNext: (progress: string, target: string) => string
+  trophyMax: string
+  medalsTip: (got: number, total: number) => string
+  wearing: (hat: string) => string
+  walking: (pal: string) => string
+  hatsHeading: string
+  palsHeading: string
+  noneYet: string
+  hatUsage: (have: string) => string
+  hatSet: (hat: string) => string
+  hatOff: string
+  palUsage: (have: string) => string
+  palSet: (pal: string) => string
+  palOff: string
+  locked: (thing: string) => string
   speaks: string
   langUsage: string
   todoUsage: string
@@ -272,10 +304,10 @@ const zh: Strings = {
   deadlines: '截止日',
   remove: '移除',
   petted: count => `被摸了 ${count} 次`,
-  describeClawd: 'Clawd 副駕：打開面板（/clawd recap 今日戰報、/clawd scene 換場景、/clawd hide 收合、/clawd lang en 換英文）',
+  describeClawd: 'Clawd 副駕：打開面板（/clawd recap 今日戰報、/clawd trophies 成就、/clawd scene 換場景、/clawd hide 收合、/clawd lang en 換英文）',
   describeTodo: 'Clawd 幫你記的人類待辦',
   describeDeadline: '截止日雷達：越接近 Clawd 越慌',
-  hintClawd: '[recap|scene 名稱|season|holiday|hide|show|lang]',
+  hintClawd: '[recap|trophies|hat|pal|scene 名稱|season|holiday|hide|show|lang]',
   hintTodo: '[add 事情|done N|undo|rm N|clear]',
   hintDeadline: '[add 12/24 名稱|rm N]',
   folded: 'Clawd 收成一行了，/clawd show 叫他回來。',
@@ -306,6 +338,58 @@ const zh: Strings = {
   recapStreak: days => (days > 0 ? `連續 ${days} 天` : '今天開工吧'),
   recapLine: d =>
     `今天 ${d.turns} 個回合、工作了 ${d.work}：用了 ${d.tools} 次工具、改了 ${d.edits} 個檔，測試 ${d.passed} 過 ${d.failed} 沒過，${d.commits} 次 commit、${d.pushes} 次 push。連續 ${d.streak} 天。`,
+  tiers: { bronze: '銅', silver: '銀', gold: '金', legend: '傳說' },
+  families: {
+    streak: '連續開工',
+    days: '開工天數',
+    commits: 'Commit',
+    pushes: 'Push',
+    tests: '測試通過',
+    green: '連續綠燈',
+    tools: '工具次數',
+    edits: '改過的檔',
+    tidy: '整理記憶',
+    helpers: '派出子代理',
+    night: '夜貓子',
+    dawn: '早起的鳥',
+    marathon: '單日馬拉松',
+    longTurn: '超長回合',
+    busyDay: '最忙的一天',
+    pets: '被摸摸',
+    prs: 'PR 合併',
+    scenes: '環遊四景',
+    holidays: '節日也上工',
+    comeback: '逆轉勝',
+    todos: '人類那一半',
+  },
+  hats: { party: '派對帽', crown: '王冠', halo: '光環', wizard: '巫師帽', captain: '船長帽', flower: '小花', explorer: '探險帽', graduation: '學士帽', headphones: '耳機' },
+  pals: { cat: '貓咪', owl: '貓頭鷹', crab: '小螃蟹' },
+  goldens: { stamp: '金色印章', seal: '金色封蠟' },
+  amount: (unit, value) => {
+    const n = unit === 'hours' ? Math.floor(value * 10) / 10 : Math.floor(value)
+    return unit === 'days' ? `${n} 天` : unit === 'hours' ? `${n} 小時` : unit === 'minutes' ? `${n} 分` : n.toLocaleString('en')
+  },
+  unlocked: trophy => `🏆 解鎖成就：${trophy}`,
+  unlockedMany: count => `🏆 解鎖了 ${count} 個成就！打 /clawd trophies 看看`,
+  brings: reward => `，獲得${reward}`,
+  trophiesTitle: '成就',
+  trophiesButton: '成就',
+  trophiesCount: (got, total) => `已解鎖 ${got} / ${total}`,
+  trophyNext: (progress, target) => `${progress} / ${target}`,
+  trophyMax: '全部完成！',
+  medalsTip: (got, total) => `獎牌：成就 ${got} / ${total}（/clawd trophies）`,
+  wearing: hat => `戴著${hat}`,
+  walking: pal => `${pal}陪著`,
+  hatsHeading: '帽子',
+  palsHeading: '夥伴',
+  noneYet: '還沒有，解鎖成就就會拿到',
+  hatUsage: have => `用法：/clawd hat 名稱、auto（最好的那頂）或 none。你有：${have}`,
+  hatSet: hat => `主 Clawd 戴上了${hat}。`,
+  hatOff: '主 Clawd 把帽子拿下來了。',
+  palUsage: have => `用法：/clawd pal 名稱、auto 或 none。你有：${have}`,
+  palSet: pal => `${pal}開始在場景裡散步了。`,
+  palOff: '夥伴回家休息了。',
+  locked: thing => `還沒解鎖${thing}。打 /clawd trophies 看要達成什麼。`,
   speaks: 'Clawd 改說中文了。',
   langUsage: '用法：/clawd lang zh、/clawd lang en、/clawd lang auto（跟系統語言）',
   todoUsage: '用法：/todo add 要做的事',
@@ -476,10 +560,10 @@ const en: Strings = {
   deadlines: 'Deadlines',
   remove: 'Remove',
   petted: count => (count === 1 ? 'Petted once' : `Petted ${count} times`),
-  describeClawd: 'Clawd Sidekick: open the pane (/clawd recap shows your day, /clawd scene changes the scene, /clawd hide folds the band, /clawd lang zh switches to Chinese)',
+  describeClawd: 'Clawd Sidekick: open the pane (/clawd recap shows your day, /clawd trophies your trophies, /clawd scene changes the scene, /clawd hide folds the band, /clawd lang zh switches to Chinese)',
   describeTodo: 'The things Clawd noted for you to do',
   describeDeadline: 'Deadline radar: the closer it gets, the more Clawd frets',
-  hintClawd: '[recap|scene name|season|holiday|hide|show|lang]',
+  hintClawd: '[recap|trophies|hat|pal|scene name|season|holiday|hide|show|lang]',
   hintTodo: '[add something|done N|undo|rm N|clear]',
   hintDeadline: '[add 12/24 name|rm N]',
   folded: 'Clawd folded into one line. /clawd show brings him back.',
@@ -512,6 +596,58 @@ const en: Strings = {
   recapStreak: days => (days === 1 ? '1-day streak' : days > 0 ? `${days}-day streak` : 'Start a streak'),
   recapLine: d =>
     `Today: ${d.turns} turns over ${d.work}, ${d.tools} tool calls, ${d.edits} files edited, tests ${d.passed} passed and ${d.failed} failed, ${d.commits} commits, ${d.pushes} pushes. ${d.streak}-day streak.`,
+  tiers: { bronze: 'Bronze', silver: 'Silver', gold: 'Gold', legend: 'Legendary' },
+  families: {
+    streak: 'Streak',
+    days: 'Days at work',
+    commits: 'Commits',
+    pushes: 'Pushes',
+    tests: 'Tests passed',
+    green: 'Green run',
+    tools: 'Tool calls',
+    edits: 'Files edited',
+    tidy: 'Tidy-ups',
+    helpers: 'Subagents sent',
+    night: 'Night owl',
+    dawn: 'Early bird',
+    marathon: 'Marathon day',
+    longTurn: 'Long haul',
+    busyDay: 'Busiest day',
+    pets: 'Pets',
+    prs: 'PRs merged',
+    scenes: 'Globetrotter',
+    holidays: 'Holiday shift',
+    comeback: 'Comeback',
+    todos: 'Your half',
+  },
+  hats: { party: 'party hat', crown: 'crown', halo: 'halo', wizard: 'wizard hat', captain: "captain's cap", flower: 'flower', explorer: "explorer's hat", graduation: 'mortarboard', headphones: 'headphones' },
+  pals: { cat: 'cat', owl: 'owl', crab: 'little crab' },
+  goldens: { stamp: 'golden stamp', seal: 'golden seal' },
+  amount: (unit, value) => {
+    const n = unit === 'hours' ? Math.floor(value * 10) / 10 : Math.floor(value)
+    return unit === 'days' ? `${n} d` : unit === 'hours' ? `${n} h` : unit === 'minutes' ? `${n} min` : n.toLocaleString('en')
+  },
+  unlocked: trophy => `🏆 Trophy: ${trophy}`,
+  unlockedMany: count => `🏆 ${count} trophies unlocked! See them with /clawd trophies`,
+  brings: reward => `, and a ${reward}`,
+  trophiesTitle: 'Trophies',
+  trophiesButton: 'Trophies',
+  trophiesCount: (got, total) => `${got} of ${total} unlocked`,
+  trophyNext: (progress, target) => `${progress} / ${target}`,
+  trophyMax: 'All done!',
+  medalsTip: (got, total) => `Medals: ${got} of ${total} trophies (/clawd trophies)`,
+  wearing: hat => `wearing the ${hat}`,
+  walking: pal => `with the ${pal}`,
+  hatsHeading: 'Hats',
+  palsHeading: 'Pals',
+  noneYet: 'None yet: trophies bring them',
+  hatUsage: have => `Usage: /clawd hat name, auto (the finest) or none. You have: ${have}`,
+  hatSet: hat => `Clawd puts on the ${hat}.`,
+  hatOff: 'Clawd takes his hat off.',
+  palUsage: have => `Usage: /clawd pal name, auto or none. You have: ${have}`,
+  palSet: pal => `The ${pal} is out for a walk.`,
+  palOff: 'The pal heads home for a rest.',
+  locked: thing => `The ${thing} isn't unlocked yet. /clawd trophies shows what it takes.`,
   speaks: 'Clawd speaks English now.',
   langUsage: 'Usage: /clawd lang en, /clawd lang zh, /clawd lang auto (follow the system language)',
   todoUsage: 'Usage: /todo add <something to do>',

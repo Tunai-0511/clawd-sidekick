@@ -7,7 +7,7 @@
 // root keeps the surface's frame transparent. When the system asks for
 // reduced motion, every loop holds its first frame and nothing drifts.
 
-import { decorate, decorParts, fallingSvg } from './decor'
+import { decorate, decorParts, fallingSvg, MEDAL_BOX } from './decor'
 import { say } from './i18n'
 import { drawScene, THEMES } from './themes'
 import {
@@ -19,6 +19,11 @@ import {
   CALENDAR,
   drawBackground,
   gameRoom,
+  drawPal,
+  hatRise,
+  PAL_FROM,
+  PAL_LOOP,
+  PAL_TO,
   drawClawd,
   drawLaptop,
   isNervous,
@@ -136,6 +141,31 @@ function house(s: SceneProps, play: Play): string {
   return paths(still) + moving.join('') + overStill(games, { x: 174, y: 0, w: SW - 174, h: SH })
 }
 
+/**
+ * The pal walking the floor and back on a loop of its own: facing right one
+ * way, left the other, its two steps taking turns. Reduced motion keeps it
+ * home, with everything else that drifts.
+ */
+function palSvg(s: SceneProps): string {
+  if (s.pal === null) return ''
+  const box: Box = { x: 0, y: 14, w: 12, h: SH - 14 }
+  const facing = (isLeft: boolean): string => {
+    const steps = [0, 1].map(step => {
+      const g = blank()
+      drawPal(g, s.pal!, 0, step, isLeft)
+      return paths(g, box)
+    })
+    return flipbook([steps[0]!, steps[0]!, steps[1]!, steps[1]!])
+  }
+  const loop = ((PAL_LOOP * STEP) / 1000).toFixed(1)
+  return (
+    `<g class="quiet drift"><animateTransform attributeName="transform" type="translate" values="${PAL_FROM} 0;${PAL_TO} 0;${PAL_FROM} 0" keyTimes="0;0.5;1" dur="${loop}s" repeatCount="indefinite"/>` +
+    `<g><animate attributeName="visibility" values="visible;hidden" keyTimes="0;0.5" calcMode="discrete" dur="${loop}s" repeatCount="indefinite"/>${facing(false)}</g>` +
+    `<g visibility="hidden"><animate attributeName="visibility" values="hidden;visible" keyTimes="0;0.5" calcMode="discrete" dur="${loop}s" repeatCount="indefinite"/>${facing(true)}</g>` +
+    '</g>'
+  )
+}
+
 /** The sleepers' blankets, over the sleepers. */
 function covers(s: SceneProps, play: Play, now: number): string {
   const g = blank()
@@ -184,8 +214,7 @@ const FONT = "font-family=\"'PingFang TC','Noto Sans TC','Microsoft JhengHei',sy
 
 /** How far over his head the bubble must go: above a holiday hat, or an armful of books. */
 function headroom(a: SceneActor, s: SceneProps): number {
-  const hat = outfitOf(a, s).hat
-  return Math.max(hat === 'witch' ? 5 : hat === 'santa' ? 4 : 0, a.doing === 'tidy' ? 6 : 0)
+  return Math.max(hatRise(outfitOf(a, s).hat), a.doing === 'tidy' ? 6 : 0)
 }
 
 function bubble(label: string, isMain: boolean, rise: number): string {
@@ -269,6 +298,7 @@ function hovers(s: SceneProps): string {
     `<g class="spot">${rectOf(BOARD, 'class="glass"')}${ring(BOARD)}<title>${escape(board)}</title></g>` +
     `<g class="spot">${rectOf(CALENDAR, 'class="glass"')}${ring(CALENDAR)}<title>${escape(calendar)}</title></g>` +
     `<g class="spot">${rectOf(art.memory.box, 'class="glass"')}${ring(art.memory.box)}<title>${escape(words.memoryTip(s.theme, s.memory))}</title></g>` +
+    (s.medals.length === 0 ? '' : `<g class="spot">${rectOf(MEDAL_BOX, 'class="glass"')}${ring(MEDAL_BOX)}<title>${escape(words.medalsTip(s.trophyCount[0], s.trophyCount[1]))}</title></g>`) +
     `<g class="spot">${rectOf(art.light.box, 'class="glass"')}${art.light.glow}<title>${escape(words.lights[s.theme])}</title></g>` +
     `<g class="spot">${rectOf(art.toy.box, 'class="glass"')}${art.toy.hi}<title>${escape(words.toys[s.theme])}</title></g>` +
     `<g class="spot">${rectOf({ x: 140, y: 5, w: 28, h: 11 }, 'class="glass"')}<title>${escape(s.theme === 'space' ? words.outsideSpace : words.outside[s.time])}</title></g>`
@@ -310,6 +340,7 @@ export function sceneSvg(s: SceneProps, now: number): string {
     hovers(s) +
     order.map(({ a, i }) => actor(a, i, s, now, play)).join('') +
     covers(s, play, now) +
+    palSvg(s) +
     fallingSvg(s) +
     '</svg>'
   )

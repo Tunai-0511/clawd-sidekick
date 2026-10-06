@@ -8,10 +8,10 @@
 // Pure drawing: the terminal client composes frames from it at its own frame
 // rate, and scene-svg.ts turns the same frames into an animated SVG.
 
-import type { Doing, Game, SceneActor, SceneProps, Theme, TimeOfDay } from '../types'
+import type { Doing, Game, Hat, Pal, SceneActor, SceneProps, Theme, TimeOfDay } from '../types'
 import { say, type Lang, type RoomId } from './i18n'
 import { blank, C, FEET, FLOOR, px, rect, type Box, type Grid } from './pixels'
-import { decorate, drawFalling } from './decor'
+import { decorate, drawFalling, MEDAL_BOX } from './decor'
 import { drawScene, THEMES } from './themes'
 
 export type { Doing, Game, SceneActor, SceneProps, Theme, TimeOfDay }
@@ -290,7 +290,56 @@ type Eyes = 'open' | 'blink' | 'happy' | 'closed' | 'up' | 'down' | 'wide'
 type Arm = 'mid' | 'up' | 'low'
 
 /** What a game asks of a player on top of his own pose: where to look, his arms, a jump. */
-export type Mod = { look?: number; armL?: Arm; armR?: Arm; lift?: number; eyes?: Eyes; isSweating?: boolean; hasScarf?: boolean; hat?: 'santa' | 'witch'; isTired?: boolean }
+export type Mod = {
+  look?: number
+  armL?: Arm
+  armR?: Arm
+  lift?: number
+  eyes?: Eyes
+  isSweating?: boolean
+  hasScarf?: boolean
+  hat?: Hat | 'santa' | 'witch'
+  isTired?: boolean
+  /** Trophies that gild the commit stamp and the envelope's seal. */
+  golden?: { stamp: boolean; seal: boolean }
+}
+
+type HatArt = { top: number; rows: readonly string[]; key: Readonly<Record<string, number>> }
+
+/**
+ * Every hat as rows of pixels from `top` (rows above the head are negative),
+ * 16 columns across his body's box; a letter is a colour from `key`.
+ */
+const HATS: Record<Hat | 'santa' | 'witch', HatArt> = {
+  santa: { top: -4, rows: ['.........rrrrw..', '......rrrrrr.w..', '....rrrrrrrr....', '...wwwwwwwwww...'], key: { r: C.red, w: C.white } },
+  witch: { top: -5, rows: ['........p.......', '.......pp.......', '......pppp......', '.....oooooo.....', '..pppppppppppp..'], key: { p: C.witch, o: C.pumpkin } },
+  party: { top: -5, rows: ['.......yy.......', '.......mm.......', '......mymm......', '.....mmmmym.....', '....mymmmmmm....'], key: { m: C.magenta, y: C.yellow } },
+  crown: { top: -3, rows: ['....g..gg..g....', '....gggggggg....', '....ggrggrgg....'], key: { g: C.gold, r: C.red } },
+  halo: { top: -4, rows: ['.....eeeeee.....', '....e......e....'], key: { e: C.ember } },
+  wizard: {
+    top: -6,
+    rows: ['.........u......', '........uu......', '.......uuu......', '......uyuuu.....', '.....uuuuuuu....', '..uuuuuuuuuuuu..'],
+    key: { u: C.purple, y: C.yellow },
+  },
+  captain: { top: -3, rows: ['.....wwwwww.....', '....wwwggwww....', '...dddddddddd...'], key: { w: C.white, g: C.gold, d: C.dark } },
+  flower: { top: -4, rows: ['..........p.....', '.........pyp....', '..........p.....', '..........g.....'], key: { p: C.pink, y: C.yellow, g: C.green } },
+  explorer: { top: -3, rows: ['.....bbbbbb.....', '.....nnnnnn.....', '..bbbbbbbbbbbb..'], key: { b: C.beige, n: C.wood } },
+  graduation: { top: -3, rows: ['...dddddddddd...', '.....dddddd.y...', '.....dddddd.y...'], key: { d: C.dark, y: C.yellow } },
+  headphones: { top: -2, rows: ['...dddddddddd...', '..d..........d..', '................', '.rr..........rr.', '.rr..........rr.'], key: { d: C.dark, r: C.red } },
+}
+
+/** How far a hat rises over the head, for a speech bubble to clear it. */
+export const hatRise = (hat: Mod['hat']): number => (hat === undefined ? 0 : -HATS[hat].top)
+
+function drawHat(g: Grid, x: number, y: number, hat: Hat | 'santa' | 'witch'): void {
+  const { top, rows, key } = HATS[hat]
+  rows.forEach((row, j) => {
+    for (let i = 0; i < row.length; i++) {
+      const c = key[row[i] ?? '.']
+      if (c !== undefined) px(g, x + i, y + top + j, c)
+    }
+  })
+}
 
 /** A Clawd at the CLI banner's own size: 16 × 10, feet on the floor at FEET. */
 export function drawClawd(g: Grid, x: number, t: number, doing: Doing | 'walk', cap: string | null, phase = 0, mod: Mod = {}): void {
@@ -472,21 +521,8 @@ export function drawClawd(g: Grid, x: number, t: number, doing: Doing | 'walk', 
     rect(g, bx + 10, y + 7, 2, 2, C.red)
     px(g, bx + 10, y + 8, C.white)
   }
-  if (mod.hat === 'santa') {
-    rect(g, bx + 3, y - 1, 10, 1, C.white)
-    rect(g, bx + 4, y - 2, 8, 1, C.red)
-    rect(g, bx + 6, y - 3, 6, 1, C.red)
-    rect(g, bx + 9, y - 4, 4, 1, C.red)
-    px(g, bx + 13, y - 4, C.white)
-    px(g, bx + 13, y - 3, C.white)
-  } else if (mod.hat === 'witch') {
-    rect(g, bx + 2, y - 1, 12, 1, C.witch)
-    rect(g, bx + 5, y - 2, 6, 1, C.pumpkin)
-    rect(g, bx + 6, y - 3, 4, 1, C.witch)
-    rect(g, bx + 7, y - 4, 2, 1, C.witch)
-    px(g, bx + 8, y - 5, C.witch)
-  }
-  drawProps(g, bx, y, k, doing)
+  if (mod.hat !== undefined) drawHat(g, bx, y, mod.hat)
+  drawProps(g, bx, y, k, doing, mod)
   if (mod.isTired && doing !== 'sleep' && k % 48 >= 30 && k % 48 < 42) {
     const rise = Math.floor((k % 48 - 30) / 4)
     rect(g, bx + 15, y - 1 - rise, 2, 1, C.light)
@@ -519,13 +555,14 @@ export function drawLaptop(g: Grid, x: number, t: number): void {
 /** A deadline under three days away makes the main Clawd sweat. */
 export const isNervous = (s: SceneProps): boolean => s.urgency === 'near' || s.urgency === 'urgent'
 
-/** What the date and the hour have the Clawds wear: scarves in winter, a hat for the main Clawd on holidays, tired eyes late in the five-hour window. */
+/** What the Clawds wear: scarves in winter; the main Clawd's trophy hat, else a holiday's; tired eyes late in the five-hour window; gold seals once earned. */
 export function outfitOf(a: SceneActor, s: SceneProps): Mod {
-  const hat = a.cap !== null ? undefined : s.holiday === 'christmas' ? 'santa' : s.holiday === 'halloween' ? 'witch' : undefined
-  return { hasScarf: s.season === 'winter', isTired: s.isTired, ...(hat === undefined ? {} : { hat }) }
+  const holidayHat = s.holiday === 'christmas' ? 'santa' : s.holiday === 'halloween' ? 'witch' : undefined
+  const hat = a.cap !== null ? undefined : (s.hat ?? holidayHat)
+  return { hasScarf: s.season === 'winter', isTired: s.isTired, ...(hat === undefined ? {} : { hat }), ...(a.cap === null ? { golden: s.golden } : {}) }
 }
 
-function drawProps(g: Grid, x: number, y: number, k: number, doing: Doing | 'walk'): void {
+function drawProps(g: Grid, x: number, y: number, k: number, doing: Doing | 'walk', mod: Mod = {}): void {
   switch (doing) {
     case 'read':
       rect(g, x + 5, y + 5, 6, 3, C.white)
@@ -613,8 +650,9 @@ function drawProps(g: Grid, x: number, y: number, k: number, doing: Doing | 'wal
       const sy = isDown ? y + 3 : y - 1
       rect(g, x + 18, sy, 3, 1, C.wood)
       rect(g, x + 19, sy + 1, 1, 1, C.wood)
-      rect(g, x + 17, sy + 2, 5, 1, C.red)
-      if (isDown || k % 16 >= 8) rect(g, x + 18, y + 6, 3, 1, C.red)
+      const ink = mod.golden?.stamp ? C.gold : C.red
+      rect(g, x + 17, sy + 2, 5, 1, ink)
+      if (isDown || k % 16 >= 8) rect(g, x + 18, y + 6, 3, 1, ink)
       break
     }
     case 'mail': {
@@ -627,7 +665,7 @@ function drawProps(g: Grid, x: number, y: number, k: number, doing: Doing | 'wal
         px(g, ex + 1, ey, C.gray)
         px(g, ex + 2, ey + 1, C.gray)
         px(g, ex + 3, ey, C.gray)
-        px(g, ex + 2, ey + 2, C.red)
+        px(g, ex + 2, ey + 2, mod.golden?.seal ? C.gold : C.red)
       }
       break
     }
@@ -706,6 +744,61 @@ export type ComposeOptions = BackgroundOptions & {
 }
 
 /** The whole scene at tick `t`, wall-clock `now`. */
+// ── The pal ───────────────────────────────────────────────────────────────
+
+type PalArt = { frames: readonly [readonly string[], readonly string[]]; key: Readonly<Record<string, number>> }
+
+/** Each pal facing right, two steps of its walk, its feet on the floor. */
+const PALS: Record<Pal, PalArt> = {
+  cat: {
+    frames: [
+      ['.....#.#', '#....#e#', '.#######', '.######.', '.#.#.#.#'],
+      ['.....#.#', '#....#e#', '.#######', '.######.', '..#.#.#.'],
+    ],
+    key: { '#': C.gray, e: C.yellow },
+  },
+  owl: {
+    frames: [
+      ['#....#', '######', '#y##y#', '#bbbb#', '.o..o.'],
+      ['......', '#....#', '######', '#y##y#', '.oooo.'],
+    ],
+    key: { '#': C.woodLight, b: C.beige, y: C.yellow, o: C.pumpkin },
+  },
+  crab: {
+    frames: [
+      ['.r...r.', 'rr...rr', '.rerer.', 'rrrrrrr', 'r.r.r.r'],
+      ['r.....r', '.r...r.', '.rerer.', 'rrrrrrr', '.r.r.r.'],
+    ],
+    key: { r: C.red, e: C.eye },
+  },
+}
+
+/** Ticks for a pal's walk across the floor and back. */
+export const PAL_LOOP = 320
+export const PAL_FROM = 4
+export const PAL_TO = 240
+
+/** Where the pal is at tick `t`, and which way it faces. */
+export function palAt(t: number): { x: number; isLeft: boolean } {
+  const half = PAL_LOOP / 2
+  const k = ((t % PAL_LOOP) + PAL_LOOP) % PAL_LOOP
+  const span = PAL_TO - PAL_FROM
+  return k < half ? { x: Math.round(PAL_FROM + (span * k) / half), isLeft: false } : { x: Math.round(PAL_TO - (span * (k - half)) / half), isLeft: true }
+}
+
+/** The pal at `x`, step `step` (0 or 1) of its walk, facing left or right. */
+export function drawPal(g: Grid, pal: Pal, x: number, step: number, isLeft: boolean): void {
+  const { frames, key } = PALS[pal]
+  const rows = frames[step % 2] ?? frames[0]
+  rows.forEach((row, j) => {
+    const line = isLeft ? [...row].reverse().join('') : row
+    for (let i = 0; i < line.length; i++) {
+      const c = key[line[i] ?? '.']
+      if (c !== undefined) px(g, x + i, FEET - rows.length + 1 + j, c)
+    }
+  })
+}
+
 export function composeScene(s: SceneProps, t: number, now: number, options: ComposeOptions = {}): Grid {
   const g = blank()
   const play = playOf(s, now)
@@ -718,6 +811,10 @@ export function composeScene(s: SceneProps, t: number, now: number, options: Com
     drawClawd(g, x, t, doing, actor.cap, i * 3, { ...mod, ...outfitOf(actor, s), isSweating: actor.cap === null && isNervous(s) })
   })
   blankets(g, play, s, now)
+  if (s.pal !== null) {
+    const { x, isLeft } = palAt(t)
+    drawPal(g, s.pal, x, Math.floor(t / 2) % 2, isLeft)
+  }
   drawFalling(g, t, s)
   return g
 }
@@ -738,7 +835,7 @@ export const CALENDAR: Box = { x: 66, y: 4, w: 9, h: 8 }
 
 const inside = (b: Box, x: number, y: number): boolean => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h
 
-export type Hit = { kind: 'actor'; id: string } | { kind: 'board' } | { kind: 'calendar' } | { kind: 'memory' } | { kind: 'room'; id: string }
+export type Hit = { kind: 'actor'; id: string } | { kind: 'board' } | { kind: 'calendar' } | { kind: 'memory' } | { kind: 'medals' } | { kind: 'room'; id: string }
 
 /** What is under scene pixel (x, y): a Clawd first (the main one on top), then the wall's things, then the room. */
 export function hitTest(s: SceneProps, now: number, x: number, y: number): Hit | undefined {
@@ -751,6 +848,7 @@ export function hitTest(s: SceneProps, now: number, x: number, y: number): Hit |
   if (inside(BOARD, x, y)) return { kind: 'board' }
   if (inside(CALENDAR, x, y)) return { kind: 'calendar' }
   if (inside(THEMES[s.theme].memory.box, x, y)) return { kind: 'memory' }
+  if (s.medals.length > 0 && inside(MEDAL_BOX, x, y)) return { kind: 'medals' }
   const room = ROOMS.find(r => x >= r.x && x < r.x + r.w && y >= 3 && y < FLOOR)
   return room === undefined ? undefined : { kind: 'room', id: room.id }
 }
@@ -769,6 +867,8 @@ export function tipOf(s: SceneProps, hit: Hit): string {
       return s.deadline === '' ? words.calendarEmpty : words.calendar(s.deadline)
     case 'memory':
       return words.memoryTip(s.theme, s.memory)
+    case 'medals':
+      return words.medalsTip(s.trophyCount[0], s.trophyCount[1])
     case 'room': {
       const id = hit.id as RoomId
       return words.roomTip(words.rooms[s.theme][id], words.roomPurpose[id])

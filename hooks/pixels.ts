@@ -124,6 +124,9 @@ const HEX = {
   gold: '#F2C14E',
   fir: '#2E8B57',
   witch: '#6B4BA8',
+  // Trophies
+  bronze: '#C0763A',
+  bronzeHi: '#E8A86A',
 } as const
 
 export type Color = keyof typeof HEX

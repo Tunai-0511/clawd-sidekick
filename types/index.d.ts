@@ -125,6 +125,15 @@ export type SceneProps = {
   memory: number | null
   /** The five-hour window is past 80%: the Clawds are getting tired. */
   isTired: boolean
+  /** The medals under the game room's bunting, best first (at most ten). */
+  medals: Tier[]
+  /** Trophies reached, of all there are, for the medals' hover. */
+  trophyCount: [number, number]
+  /** What the main Clawd wears when no holiday hat takes its place. */
+  hat: Hat | null
+  pal: Pal | null
+  /** Commits stamped and pushes sealed in gold. */
+  golden: { stamp: boolean; seal: boolean }
   season: Season
   holiday: Holiday
 }
@@ -155,6 +164,59 @@ export type Day = {
   /** Subagents sent out. */
   helpers: number
   pets: number
+}
+
+export type Tier = 'bronze' | 'silver' | 'gold' | 'legend'
+
+/** What a trophy can bring the main Clawd to wear. */
+export type Hat = 'party' | 'crown' | 'halo' | 'wizard' | 'captain' | 'flower' | 'explorer' | 'graduation' | 'headphones'
+
+/** A companion who walks the floor of every scene. */
+export type Pal = 'cat' | 'owl' | 'crab'
+
+/** Every day's work added up, kept for good: what the trophies are measured against. */
+export type Life = {
+  turns: number
+  workMs: number
+  tools: number
+  edits: number
+  runs: number
+  testsPassed: number
+  testsFailed: number
+  commits: number
+  pushes: number
+  prsOpened: number
+  prsMerged: number
+  compactions: number
+  helpers: number
+  pets: number
+  /** Days with work, the run of them up to `lastDay`, and the longest run. */
+  days: number
+  streak: number
+  bestStreak: number
+  lastDay: string
+  /** Test runs passed in a row, the best such run, and failures in a row. */
+  greenRun: number
+  bestGreenRun: number
+  failRun: number
+  /** Passing runs right after three or more failures. */
+  comebacks: number
+  /** Turns begun between midnight and five, and between five and seven. */
+  nightTurns: number
+  dawnTurns: number
+  longestTurnMs: number
+  bestDayMs: number
+  bestDayTools: number
+  scenes: Theme[]
+  holidays: Holiday[]
+  todosDone: number
+}
+
+/** The trophies reached (`family:tier` → when), and what the main Clawd wears and walks with. */
+export type Trophies = {
+  unlocked: Record<string, number>
+  hat: Hat | 'auto' | 'none'
+  pal: Pal | 'auto' | 'none'
 }
 
 /** The status line figures: model, context, plan windows, cost, this turn. */
@@ -196,6 +258,7 @@ declare module 'claude-code' {
       holidayPick: Holiday | 'auto'
       /** Today so far, for the recap card. */
       today: Day | null
+      trophies: Trophies
     }
   }
 }

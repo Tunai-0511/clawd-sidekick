@@ -10,7 +10,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement } from 'claude-code'
 
-import type { Activity, Day, Deadline, Doing, Game, Holiday, Pose, RoomId, SceneActor, SceneProps, Season, Theme, TimeOfDay, Todo, Usage } from '../types'
+import type { Activity, Day, Deadline, Doing, Game, Hat, Holiday, Life, Pal, Pose, RoomId, SceneActor, SceneProps, Season, Theme, Tier, TimeOfDay, Todo, Trophies, Usage } from '../types'
 import { countdown, formatDue, parseDeadline, parseOffset, urgency, URGENCY_COLOR } from './deadline'
 import { langOf, say, type Lang } from './i18n'
 import { actorX, layoutFor, ROOMS, SH, SPOT_X, SW, type Spot } from './scene'
@@ -21,12 +21,29 @@ import { clawdSvg } from './svg'
 import { isTestRun, momentOf, type GitOperation } from './events'
 import { dateOf, dayBefore, duration, emptyDay, favoriteRoom, poseOf, recapLine, recapSvg, ROOM_IDS, streakOf } from './recap'
 import { holidayOf, seasonOf, zoneOf } from './seasons'
+import {
+  emptyLife,
+  FAMILIES,
+  goldenOf,
+  hatFor,
+  hatsOf,
+  lifeFromDays,
+  medalsOf,
+  NO_TROPHIES,
+  palFor,
+  palsOf,
+  reached,
+  standing,
+  TROPHY_TOTAL,
+  type FamilyId,
+} from './trophies'
 import { extractPrompt, isDuplicate, newId, ordered, parseList, shouldExtract } from './todo'
 
 type Engine = EngineInterface
 
 const PANE = 'clawd'
 const RECAP = 'clawd-recap'
+const TROPHY_PANE = 'clawd-trophies'
 
 /** What the spinner says the turn is doing: in English whatever Clawd speaks, beside Claude Code's own `Working…`. */
 const MODE_WORDS = { requesting: 'requesting', responding: 'responding', thinking: 'thinking', 'tool-input': 'preparing a tool', 'tool-use': 'using tools' } as const
@@ -47,6 +64,7 @@ const langAtom = atom({ plugin: 'clawd-sidekick', key: 'lang' } as const, 'en')
 const themeAtom = atom({ plugin: 'clawd-sidekick', key: 'theme' } as const, 'house')
 const zoneAtom = atom({ plugin: 'clawd-sidekick', key: 'zone' } as const, '')
 const todayAtom = atom({ plugin: 'clawd-sidekick', key: 'today' } as const, null)
+const trophiesAtom = atom({ plugin: 'clawd-sidekick', key: 'trophies' } as const, NO_TROPHIES)
 const seasonPickAtom = atom({ plugin: 'clawd-sidekick', key: 'seasonPick' } as const, 'auto')
 const holidayPickAtom = atom({ plugin: 'clawd-sidekick', key: 'holidayPick' } as const, 'auto')
 
@@ -271,14 +289,107 @@ async function releaseCrew($: Engine, agentKey: string): Promise<void> {
 
 const ROOM_OF_SPOT: Partial<Record<Spot, RoomId>> = { library: 'library', board: 'codelab', code: 'codelab', bash: 'terminal', web: 'web', arcade: 'game' }
 
-/** Today's record from the store (another session's work counts too), changed and kept. */
-async function logDay($: Engine, change: (day: Day) => void): Promise<void> {
+const COUNTERS = ['turns', 'workMs', 'tools', 'edits', 'runs', 'testsPassed', 'testsFailed', 'commits', 'pushes', 'prsOpened', 'prsMerged', 'compactions', 'helpers', 'pets'] as const
+
+/**
+ * Today's record from the store (another session's work counts too),
+ * changed and kept; what it adds goes to the lifetime totals too, with
+ * anything only those keep (`lifeChange`), and the trophies are checked.
+ */
+async function logDay($: Engine, change: (day: Day) => void, lifeChange?: (life: Life) => void): Promise<void> {
   const date = dateOf(await $.clock.now(), await read($, offsetAtom))
   const kept = (await $.store.get(`day:${date}`)) as Day | undefined
   const day: Day = kept === undefined ? emptyDay(date) : { ...emptyDay(date), ...kept, rooms: { ...emptyDay(date).rooms, ...kept.rooms } }
+  const before = { ...day }
   change(day)
   await $.store.set(`day:${date}`, day)
   await update($, todayAtom, () => day)
+  await changeLife($, life => {
+    for (const key of COUNTERS) life[key] += day[key] - before[key]
+    if (before.turns + before.tools === 0 && day.turns + day.tools > 0 && life.lastDay !== date) {
+      life.days++
+      life.streak = life.lastDay === dayBefore(date) ? life.streak + 1 : 1
+      life.bestStreak = Math.max(life.bestStreak, life.streak)
+      life.lastDay = date
+    }
+    life.bestDayMs = Math.max(life.bestDayMs, day.workMs)
+    life.bestDayTools = Math.max(life.bestDayTools, day.tools)
+    life.longestTurnMs = Math.max(life.longestTurnMs, day.longestMs)
+    lifeChange?.(life)
+  })
+}
+
+// ── Trophies ────────────────────────────────────────────────────────────
+
+/** The lifetime totals; the first time, rebuilt from the days kept so far. */
+async function loadLife($: Engine): Promise<Life> {
+  const kept = (await $.store.get('life')) as Life | undefined
+  if (kept !== undefined) return { ...emptyLife(), ...kept }
+  const days: Day[] = []
+  for (const key of await $.store.keys()) {
+    if (!key.startsWith('day:')) continue
+    const day = (await $.store.get(key)) as Day | undefined
+    if (day !== undefined) days.push({ ...emptyDay(key.slice(4)), ...day })
+  }
+  const life = lifeFromDays(days)
+  life.pets = Number((await $.store.get('pets')) ?? 0)
+  life.todosDone = ((await $.store.get('todos')) as Todo[] | undefined)?.filter(todo => todo.isDone).length ?? 0
+  life.scenes = [await read($, themeAtom)]
+  await $.store.set('life', life)
+  return life
+}
+
+/** Changes the lifetime totals from what the store holds now, then sees what that reached. */
+async function changeLife($: Engine, change: (life: Life) => void): Promise<void> {
+  const life = await loadLife($)
+  change(life)
+  await $.store.set('life', life)
+  await checkTrophies($, life)
+}
+
+/** Keeps every trophy `life` newly reached, says so, and has Clawd cheer. */
+async function checkTrophies($: Engine, life: Life): Promise<void> {
+  const kept = ((await $.store.get('trophies')) as Trophies | undefined) ?? (await read($, trophiesAtom))
+  const fresh = reached(life).filter(id => kept.unlocked[id] === undefined)
+  if (fresh.length === 0) {
+    await update($, trophiesAtom, () => kept)
+    return
+  }
+  const now = await $.clock.now()
+  const next: Trophies = { ...kept, unlocked: { ...kept.unlocked } }
+  for (const id of fresh) next.unlocked[id] = now
+  await $.store.set('trophies', next)
+  await update($, trophiesAtom, () => next)
+  const w = say(lang)
+  if (fresh.length > 1) {
+    $.ui.toast(w.unlockedMany(fresh.length), { timeoutMs: 8000 })
+    return
+  }
+  const [family, tier] = (fresh[0] ?? '').split(':') as [FamilyId, Tier]
+  const spec = FAMILIES.find(f => f.id === family)?.tiers.find(t => t.tier === tier)
+  const reward = spec?.reward === undefined ? '' : 'hat' in spec.reward ? w.hats[spec.reward.hat] : 'pal' in spec.reward ? w.pals[spec.reward.pal] : w.goldens[spec.reward.golden]
+  const name = `${w.families[family]}・${w.tiers[tier]}`
+  $.ui.toast(`${w.unlocked(name)}${reward === '' ? '' : w.brings(reward)}`, { timeoutMs: 8000 })
+  await flash($, 'cheer', `🏆 ${name}`, 3500, () => settle($))
+}
+
+/** A hat or a pal by its name in either language, or `auto` / `none`. */
+function pickOf<T extends string>(text: string, names: readonly Record<T, string>[]): T | 'auto' | 'none' | undefined {
+  const wanted = text.trim().toLowerCase()
+  if (wanted === 'auto' || wanted === '') return 'auto'
+  if (wanted === 'none' || wanted === 'off') return 'none'
+  for (const table of names) {
+    for (const [id, name] of Object.entries(table) as [T, string][]) if (id.toLowerCase() === wanted || name.toLowerCase() === wanted) return id
+  }
+  return undefined
+}
+
+async function setTrophyPick($: Engine, change: (t: Trophies) => Trophies): Promise<Trophies> {
+  const kept = ((await $.store.get('trophies')) as Trophies | undefined) ?? (await read($, trophiesAtom))
+  const next = change(kept)
+  await $.store.set('trophies', next)
+  await update($, trophiesAtom, () => next)
+  return next
 }
 
 /** Today's figures as the store has them, for the idle line, without writing anything. */
@@ -414,6 +525,9 @@ async function setTheme($: Engine, choice: Theme | 'next'): Promise<Theme> {
   const theme = choice === 'next' ? (THEME_ORDER[(THEME_ORDER.indexOf(current) + 1) % THEME_ORDER.length] ?? 'house') : choice
   await $.store.set('theme', theme)
   await update($, themeAtom, () => theme)
+  await changeLife($, life => {
+    if (!life.scenes.includes(theme)) life.scenes.push(theme)
+  })
   return theme
 }
 
@@ -444,7 +558,12 @@ async function completeTodo($: Engine, id: string): Promise<Todo | undefined> {
       return done
     }),
   )
-  if (done !== undefined) await flash($, 'cheer', say(lang).done(clip(done.text, 18)), 2500, () => settle($))
+  if (done !== undefined) {
+    await flash($, 'cheer', say(lang).done(clip(done.text, 18)), 2500, () => settle($))
+    await changeLife($, life => {
+      life.todosDone++
+    })
+  }
   return done
 }
 
@@ -548,7 +667,7 @@ export const register: Register = (on, options) => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
-    const [doing, todos, deadlines, isCollapsed, project, actors, usage, game, offset, talk, theme, zone, seasonPick, holidayPick] = await Promise.all([
+    const [doing, todos, deadlines, isCollapsed, project, actors, usage, game, offset, talk, theme, zone, seasonPick, holidayPick, trophies] = await Promise.all([
       read($, activity),
       read($, todosAtom),
       read($, deadlinesAtom),
@@ -563,6 +682,7 @@ export const register: Register = (on, options) => {
       read($, zoneAtom),
       read($, seasonPickAtom),
       read($, holidayPickAtom),
+      read($, trophiesAtom),
       read($, nowAtom),
     ])
     const w = say(talk)
@@ -599,6 +719,7 @@ export const register: Register = (on, options) => {
       )
     }
 
+    const holiday = holidayPick !== 'auto' ? holidayPick : holidayOf(now, offset)
     const scene: SceneProps = {
       actors,
       todos: open.length,
@@ -614,7 +735,13 @@ export const register: Register = (on, options) => {
       memory: usage.contextPercent === null ? null : Math.min(10, Math.floor(usage.contextPercent / 10)),
       isTired: (usage.fiveHour ?? 0) >= 80,
       season: seasonPick !== 'auto' ? seasonPick : seasonOf(now, offset, zone),
-      holiday: holidayPick !== 'auto' ? holidayPick : holidayOf(now, offset),
+      holiday,
+      medals: medalsOf(trophies.unlocked),
+      trophyCount: [Object.keys(trophies.unlocked).length, TROPHY_TOTAL],
+      // A holiday's hat stands in for the trophy hat, unless one was picked by hand.
+      hat: trophies.hat === 'auto' && (holiday === 'christmas' || holiday === 'halloween') ? null : hatFor(trophies),
+      pal: palFor(trophies),
+      golden: goldenOf(trophies.unlocked),
     }
     let house: RenderElement
     if (e.surface === 'terminal') {
@@ -807,7 +934,10 @@ export const register: Register = (on, options) => {
           {sprite}
           <Text color={ORANGE}>{`「${doing.label || w.hello}」`}</Text>
           <Text dimColor>{w.petted(pets)}</Text>
-          <Button key="recap" label={w.recapButton} hotkey="r" onPress={() => $.ui.open({ id: RECAP, title: w.recapPaneTitle })} />
+          <Box flexDirection="row" gap={1}>
+            <Button key="recap" label={w.recapButton} hotkey="r" onPress={() => $.ui.open({ id: RECAP, title: w.recapPaneTitle })} />
+            <Button key="trophies" label={w.trophiesButton} hotkey="t" onPress={() => $.ui.open({ id: TROPHY_PANE, title: w.trophiesTitle })} />
+          </Box>
         </Box>
 
         <Box flexDirection="column">
@@ -836,6 +966,60 @@ export const register: Register = (on, options) => {
               <Button key={`rm-${d.id}`} label={w.remove} plain dimColor onPress={() => changeDeadlines($, list => list.filter(x => x.id !== d.id))} />
             </Box>
           ))}
+        </Box>
+      </Box>
+    )
+  })
+
+  on('ui.render', { component: 'Pane', requestId: TROPHY_PANE }, async ($, e) => {
+    const [talk, trophies] = await Promise.all([read($, langAtom), read($, trophiesAtom)])
+    const life = await loadLife($)
+    const w = say(talk)
+    const { Box, Text } = $.ui.resolve(e)
+    const TIER_COLOR: Record<Tier, string> = { bronze: '#C0763A', silver: '#C9CDD3', gold: '#F2C14E', legend: '#E05EC8' }
+    const got = Object.keys(trophies.unlocked).length
+    const hats = hatsOf(trophies.unlocked)
+    const pals = palsOf(trophies.unlocked)
+    const hat = hatFor(trophies)
+    const pal = palFor(trophies)
+    const rewardName = (reward: NonNullable<(typeof FAMILIES)[number]['tiers'][number]['reward']>): string =>
+      'hat' in reward ? w.hats[reward.hat] : 'pal' in reward ? w.pals[reward.pal] : w.goldens[reward.golden]
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Text color={ORANGE} bold>{`── ${w.trophiesTitle} · ${w.trophiesCount(got, TROPHY_TOTAL)} ──`}</Text>
+        <Box flexDirection="column">
+          <Text>
+            <Text bold>{`${w.hatsHeading}  `}</Text>
+            <Text dimColor>{hats.length === 0 ? w.noneYet : hats.map(h => (h === hat ? `${w.hats[h]} ✓` : w.hats[h])).join('、')}</Text>
+          </Text>
+          <Text>
+            <Text bold>{`${w.palsHeading}  `}</Text>
+            <Text dimColor>{pals.length === 0 ? w.noneYet : pals.map(p => (p === pal ? `${w.pals[p]} ✓` : w.pals[p])).join('、')}</Text>
+          </Text>
+        </Box>
+        <Box flexDirection="column">
+          {FAMILIES.map(family => {
+            const { tier, next } = standing(family, trophies.unlocked)
+            const value = family.progress(life)
+            const filled = next === null ? 10 : Math.min(10, Math.floor((10 * value) / next.target))
+            return (
+              <Box key={family.id} flexDirection="row" gap={1}>
+                <Text color={tier === null ? undefined : TIER_COLOR[tier]} dimColor={tier === null}>
+                  {tier === null ? '○' : '●'}
+                </Text>
+                <Text>{w.families[family.id]}</Text>
+                <Text color={tier === null ? undefined : TIER_COLOR[tier]} dimColor={tier === null}>
+                  {tier === null ? '—' : w.tiers[tier]}
+                </Text>
+                <Text color={ORANGE}>{'▰'.repeat(filled) + '▱'.repeat(10 - filled)}</Text>
+                <Text dimColor>
+                  {next === null
+                    ? w.trophyMax
+                    : `${w.trophyNext(w.amount(family.unit, value), w.amount(family.unit, next.target))} → ${w.tiers[next.tier]}${next.reward === undefined ? '' : `（${rewardName(next.reward)}）`}`}
+                </Text>
+              </Box>
+            )
+          })}
         </Box>
       </Box>
     )
@@ -931,6 +1115,7 @@ export const register: Register = (on, options) => {
     lang = await chooseLang($)
     await update($, langAtom, () => lang)
     await loadToday($)
+    await changeLife($, () => {})
     await act($, 'idle', '')
     $.clock.every(5_000, () => void tickClock($))
     void checkClock($)
@@ -954,6 +1139,31 @@ export const register: Register = (on, options) => {
 
   on('command.run', { command: 'clawd' }, async ($, e) => {
     const [arg = '', choice = ''] = e.args.trim().split(/\s+/)
+    if (arg === 'trophies' || arg === 'trophy' || arg === '成就') {
+      await $.ui.open({ id: TROPHY_PANE, title: say(lang).trophiesTitle })
+      const trophies = await read($, trophiesAtom)
+      return { text: say(lang).trophiesCount(Object.keys(trophies.unlocked).length, TROPHY_TOTAL) }
+    }
+    if (arg === 'hat' || arg === 'pal') {
+      const words = say(lang)
+      const trophies = await read($, trophiesAtom)
+      if (arg === 'hat') {
+        const have = hatsOf(trophies.unlocked)
+        const pick = pickOf<Hat>(choice, [say('en').hats, say('zh').hats])
+        if (pick === undefined || choice === '') return { text: words.hatUsage(have.length === 0 ? words.noneYet : have.map(h => words.hats[h]).join('、')) }
+        if (pick !== 'auto' && pick !== 'none' && !have.includes(pick)) return { text: words.locked(words.hats[pick]) }
+        const next = await setTrophyPick($, t => ({ ...t, hat: pick }))
+        const worn = hatFor(next)
+        return { text: worn === null ? words.hatOff : words.hatSet(words.hats[worn]) }
+      }
+      const have = palsOf(trophies.unlocked)
+      const pick = pickOf<Pal>(choice, [say('en').pals, say('zh').pals])
+      if (pick === undefined || choice === '') return { text: words.palUsage(have.length === 0 ? words.noneYet : have.map(p => words.pals[p]).join('、')) }
+      if (pick !== 'auto' && pick !== 'none' && !have.includes(pick)) return { text: words.locked(words.pals[pick]) }
+      const next = await setTrophyPick($, t => ({ ...t, pal: pick }))
+      const walking = palFor(next)
+      return { text: walking === null ? words.palOff : words.palSet(words.pals[walking]) }
+    }
     if (arg === 'recap') {
       await $.ui.open({ id: RECAP, title: say(lang).recapPaneTitle })
       const { today, streak } = await readWeek($)
@@ -1122,13 +1332,14 @@ export const register: Register = (on, options) => {
         const moment = tool === 'Bash' && ran.deny === undefined ? momentOf(str(input.command), isFailed, git, lang) : undefined
         const spot = PLACE[seen.pose].spot
         const room = spot === null ? undefined : ROOM_OF_SPOT[spot]
+        const isTest = tool === 'Bash' && isTestRun(str(input.command))
         if (ran.deny === undefined) await logDay($, day => {
           day.tools++
           if (room !== undefined) day.rooms[room]++
           if (!isFailed && EDIT_TOOLS.has(tool)) day.edits++
           if (tool === 'Bash') day.runs++
           if (isDispatch) day.helpers++
-          if (tool === 'Bash' && isTestRun(str(input.command))) {
+          if (isTest) {
             if (isFailed) day.testsFailed++
             else day.testsPassed++
           }
@@ -1136,6 +1347,17 @@ export const register: Register = (on, options) => {
           if (git?.push !== undefined) day.pushes++
           if (git?.pr?.action === 'created') day.prsOpened++
           if (git?.pr?.action === 'merged') day.prsMerged++
+        }, life => {
+          if (!isTest) return
+          if (isFailed) {
+            life.failRun++
+            life.greenRun = 0
+            return
+          }
+          if (life.failRun >= 3) life.comebacks++
+          life.failRun = 0
+          life.greenRun++
+          life.bestGreenRun = Math.max(life.bestGreenRun, life.greenRun)
         })
         if (moment !== undefined) await flash($, moment.pose, moment.label, moment.ms, () => settle($))
         else if (isFailed) await flash($, 'oops', say(lang).failed(seen.label), 2500, () => settle($))
@@ -1185,11 +1407,23 @@ export const register: Register = (on, options) => {
     if (e.agentId !== undefined) return result
     isWorking = false
     lastTurnMs = e.durationMs
-    await logDay($, day => {
-      day.turns++
-      day.workMs += e.durationMs
-      day.longestMs = Math.max(day.longestMs, e.durationMs)
-    })
+    const ended = await $.clock.now()
+    const offset = await read($, offsetAtom)
+    const hour = new Date(ended - e.durationMs + offset * 60_000).getUTCHours()
+    const holiday = holidayOf(ended, offset)
+    await logDay(
+      $,
+      day => {
+        day.turns++
+        day.workMs += e.durationMs
+        day.longestMs = Math.max(day.longestMs, e.durationMs)
+      },
+      life => {
+        if (hour < 5) life.nightTurns++
+        else if (hour < 7) life.dawnTurns++
+        if (holiday !== 'none' && !life.holidays.includes(holiday)) life.holidays.push(holiday)
+      },
+    )
     void refreshUsage($, true)
     await arrangeCrew($)
     if (e.reason === 'aborted') {

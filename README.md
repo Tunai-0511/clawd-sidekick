@@ -46,6 +46,39 @@
 
 ![The moments in four scenes: Clawd holds up a "?" sign for your OK in the house, stamps a commit at the camp, sends a push off as an envelope on the beach, and carries the station's data off while compacting; the shelves and crystals show how full the context is](./docs/moments-en.png)
 
+**Trophies.** 79 goals in 21 families, most in four tiers, from a first commit to a hundred days in a row, a million tool calls or a three-hour turn. Every family you reach hangs a medal under the game room's bunting. Some bring the main Clawd a hat (a party hat, a crown, a halo, a wizard hat…), a pal who walks the floor (a cat, an owl, a little crab), or a golden stamp and seal for your commits and pushes. `/clawd trophies` shows where you stand on each; `/clawd hat` and `/clawd pal` choose what he wears and who walks with him. The days you already worked count from the start.
+
+![The medals under the bunting, a crowned Clawd and his cat, in all four scenes](./docs/trophies.png)
+
+<details>
+<summary>Every trophy</summary>
+
+| Trophy | For | Bronze | Silver | Gold | Legendary |
+| --- | --- | --- | --- | --- | --- |
+| Streak | Days in a row with work | 3 d | 7 d + party hat | 30 d + crown | 100 d + cat |
+| Days at work | Days with work, in all | 10 d | 50 d | 200 d | 365 d + halo |
+| Commits | Commits | 1 | 100 | 1,000 + golden stamp | 5,000 |
+| Pushes | Pushes | 1 | 50 | 500 + golden seal | 2,000 |
+| Tests passed | Test runs passed | 1 | 100 | 1,000 + mortarboard | 10,000 |
+| Green run | Test runs passed in a row | 5 | 25 | 100 | 500 |
+| Tool calls | Tool calls | 1,000 | 10,000 | 100,000 + headphones | 1,000,000 |
+| Files edited | Files edited | 100 | 1,000 | 10,000 | 50,000 |
+| Tidy-ups | Conversations compacted | 1 | 10 | 50 + wizard hat | 200 |
+| Subagents sent | Subagents sent out | 10 | 100 | 1,000 + captain's cap | 5,000 |
+| Night owl | Turns begun between midnight and 5 | 1 | 25 | 100 + owl | 500 |
+| Early bird | Turns begun between 5 and 7 in the morning | 1 | 25 | 100 + flower | 300 |
+| Marathon day | Most work in one day | 4 h | 8 h | 12 h | 16 h |
+| Long haul | Longest single turn | 10 min | 30 min | 60 min | 180 min |
+| Busiest day | Most tool calls in one day | 300 | 1,000 | 3,000 | 10,000 |
+| Pets | Times Clawd was petted | 10 | 100 | 1,000 + little crab | 10,000 |
+| PRs merged | Pull requests merged | 1 | 25 | 100 | 500 |
+| Globetrotter | Scenes lived in | — | 4 + explorer's hat | — | — |
+| Holiday shift | Holidays worked through (Lunar New Year, Halloween, Christmas) | 1 | 2 | 3 | — |
+| Comeback | Passing after three or more failures in a row | 1 | 10 | 50 | — |
+| Your half | To-dos you ticked off | 10 | 100 | 500 | 2,000 |
+
+</details>
+
 **Seasons and holidays.** The scenes follow the calendar wherever you are, with no network:
 
 - **Seasons**, from your local date: blossoms and drifting petals in spring, a red-and-gold forest and falling leaves in autumn, scarves on every Clawd in winter. South of the equator the seasons turn over: your system time zone (`Australia/Sydney`, `America/Sao_Paulo`) tells Clawd which side you're on.
@@ -98,6 +131,9 @@ Third-party marketplaces don't auto-update by default, and a marketplace can't s
 | --- | --- |
 | `/clawd` | Open the Clawd Sidekick pane: big Clawd, your full to-do list, all deadlines |
 | `/clawd recap` | Today's card: time worked, the figures, the rooms, the week and your streak |
+| `/clawd trophies` | Every trophy family: your tier, your progress, what the next tier brings |
+| `/clawd hat <name>` · `auto` · `none` | Put on a hat you've earned (`auto`: the finest) |
+| `/clawd pal <name>` · `auto` · `none` | Choose the pal who walks the floor |
 | `/clawd scene house` · `beach` · `space` · `forest` · `next` | Move the Clawds to another scene |
 | `/clawd season winter` · `auto` | Set the season by hand, or follow the date |
 | `/clawd holiday christmas` · `lunar` · `halloween` · `none` · `auto` | Set the decorations by hand, or follow the date |
@@ -122,7 +158,7 @@ A mod runs with your permissions, so here is everything this one reaches (`claud
 
 - **Model calls**: only after a turn whose reply looks like it hands you something ("you'll need to…", "please upload…"), one short call to `todoModel`. Nothing else calls a model.
 - **Processes**: `date +%z` and `readlink /etc/localtime` once at start, for your time zone and which way the seasons run; `defaults read -g AppleLanguages` once, on macOS, when the language is `auto` and no `LANG` is set.
-- **Storage**: your to-dos, deadlines, scene, language, pet count and each day's figures for the recap, in the plugin's own store on your machine.
+- **Storage**: your to-dos, deadlines, scene, language, pet count, each day's figures for the recap and the running totals for the trophies, in the plugin's own store on your machine.
 - **Environment**: reads `LANG`, `LC_ALL`, `LC_MESSAGES` and `TZ`.
 - **Network: none.**
 

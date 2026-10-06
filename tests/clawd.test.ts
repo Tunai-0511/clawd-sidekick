@@ -5,7 +5,9 @@ import type { Doing, Game, SceneActor, SceneProps, Season, Theme, TimeOfDay } fr
 import { countdown, parseDeadline, urgency } from '../hooks/deadline'
 import { isTestRun, momentOf } from '../hooks/events'
 import { dateOf, dayBefore, emptyDay, poseOf, recapSvg, streakOf } from '../hooks/recap'
-import { composeScene, hitTest, layoutFor, SPOT_X, tipOf } from '../hooks/scene'
+import { MEDAL_BOX } from '../hooks/decor'
+import { emptyLife, FAMILIES, hatFor, lifeFromDays, medalsOf, palFor, reached, TROPHY_TOTAL } from '../hooks/trophies'
+import { composeScene, hatRise, hitTest, layoutFor, SPOT_X, tipOf } from '../hooks/scene'
 import { sceneSvg } from '../hooks/scene-svg'
 import { holidayOf, isSouthern, seasonOf, zoneOf } from '../hooks/seasons'
 import { CYCLE, frame, H, POSES, W } from '../hooks/sprite'
@@ -40,6 +42,11 @@ const sceneOf = (game: Game, time: TimeOfDay = 'day', lang: 'zh' | 'en' = 'zh', 
   theme,
   memory: 5,
   isTired: false,
+  medals: [],
+  trophyCount: [0, 79],
+  hat: null,
+  pal: null,
+  golden: { stamp: false, seal: false },
   season,
   holiday: 'none',
 })
@@ -227,6 +234,99 @@ describe('what happens shows in every scene', () => {
     expect(momentOf('gh pr merge 12', false, { pr: { number: 12, action: 'merged' } }, 'zh')).toMatchObject({ pose: 'cheer', label: 'PR #12 合併了！' })
     expect(momentOf('git push', true, { push: { branch: 'main' } }, 'zh')).toBeUndefined()
     expect(momentOf('ls', false, undefined, 'zh')).toBeUndefined()
+  })
+})
+
+describe('trophies', () => {
+  const differing = (a: Uint8Array, b: Uint8Array, box: { x: number; y: number; w: number; h: number }): number => {
+    let n = 0
+    for (let y = box.y; y < box.y + box.h; y++) for (let x = box.x; x < box.x + box.w; x++) if (a[y * 256 + x] !== b[y * 256 + x]) n++
+    return n
+  }
+  const at = (theme: Theme): SceneProps => {
+    const s = sceneOf('pong', 'day', 'zh', theme)
+    return { ...s, actors: s.actors.map(a => (a.cap === null ? { ...a, fromX: SPOT_X.code, toX: SPOT_X.code, departAt: 0, doing: 'code' as const, label: '改 app.ts' } : a)) }
+  }
+
+  test('79 goals in rising tiers, from a first commit to a hundred days in a row', async () => {
+    expect(TROPHY_TOTAL).toBe(79)
+    for (const family of FAMILIES) {
+      const targets = family.tiers.map(t => t.target)
+      expect([...targets].sort((a, b) => a - b)).toEqual(targets)
+    }
+    const life = { ...emptyLife(), commits: 1, bestStreak: 30, tools: 999 }
+    expect(reached(life)).toEqual(expect.arrayContaining(['commits:bronze', 'streak:bronze', 'streak:silver', 'streak:gold']))
+    expect(reached(life)).not.toContain('tools:bronze')
+    expect(reached(life)).not.toContain('streak:legend')
+  })
+
+  test('the medals show each goal at its best, and hats and pals come as rewards', async () => {
+    const unlocked = { 'commits:bronze': 1, 'commits:silver': 2, 'streak:bronze': 3, 'streak:silver': 4, 'streak:gold': 5, 'scenes:silver': 6 }
+    expect(medalsOf(unlocked)).toEqual(['gold', 'silver', 'silver'])
+    expect(hatFor({ unlocked, hat: 'auto', pal: 'auto' })).toBe('crown')
+    expect(hatFor({ unlocked, hat: 'explorer', pal: 'auto' })).toBe('explorer')
+    expect(hatFor({ unlocked, hat: 'halo', pal: 'auto' })).toBe('crown')
+    expect(hatFor({ unlocked, hat: 'none', pal: 'auto' })).toBeNull()
+    expect(palFor({ unlocked, hat: 'auto', pal: 'auto' })).toBeNull()
+    expect(palFor({ unlocked: { 'pets:gold': 1 }, hat: 'auto', pal: 'auto' })).toBe('crab')
+  })
+
+  test('the days already kept count toward the streak', async () => {
+    const day = (date: string, tools: number) => ({ ...emptyDay(date), tools, turns: tools > 0 ? 1 : 0 })
+    const life = lifeFromDays([day('2026-10-01', 5), day('2026-10-02', 3), day('2026-10-03', 0), day('2026-10-04', 9), day('2026-10-05', 2), day('2026-10-06', 4)])
+    expect(life.days).toBe(5)
+    expect(life.bestStreak).toBe(3)
+    expect(life.streak).toBe(3)
+    expect(life.tools).toBe(23)
+  })
+
+  test('every scene hangs the medals, wears every hat clear of the bubble, and walks the pal', async () => {
+    const medals = ['legend', 'gold', 'gold', 'silver', 'silver', 'silver', 'bronze', 'bronze', 'bronze', 'bronze'] as const
+    for (const theme of THEME_ORDER) {
+      expect(differing(composeScene({ ...at(theme), medals: [...medals] }, 0, NOW), composeScene(at(theme), 0, NOW), MEDAL_BOX)).toBeGreaterThan(40)
+      expect(sceneSvg({ ...at(theme), medals: [...medals], trophyCount: [23, 79] }, NOW)).toContain('成就 23 / 79')
+      expect(tipOf({ ...at(theme), medals: [...medals], trophyCount: [23, 79] }, hitTest({ ...at(theme), medals: [...medals] }, NOW, 200, 9)!)).toContain('23 / 79')
+      for (const hat of ['party', 'crown', 'halo', 'wizard', 'captain', 'flower', 'explorer', 'graduation', 'headphones'] as const) {
+        const s = { ...at(theme), hat }
+        const around = { x: SPOT_X.code, y: 8, w: 16, h: 8 }
+        expect(differing(composeScene(s, 0, NOW), composeScene(at(theme), 0, NOW), around)).toBeGreaterThan(2)
+        const svg = sceneSvg({ ...s, medals: [...medals], pal: 'cat' }, NOW)
+        expect(svg.length).toBeLessThan(131072)
+        const bubble = svg.match(/<g class="quiet"><rect x="[\d.]+" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/)
+        expect(Number(bubble?.[1]) + Number(bubble?.[2]) + 1).toBeLessThanOrEqual(15 - hatRise(hat) + 0.5)
+      }
+      for (const pal of ['cat', 'owl', 'crab'] as const) {
+        const frames = [0, 80, 160, 240].map(t => composeScene({ ...at(theme), pal }, t, NOW))
+        const plain = [0, 80, 160, 240].map(t => composeScene(at(theme), t, NOW))
+        expect(frames.filter((g, i) => differing(g, plain[i]!, { x: 0, y: 19, w: 256, h: 6 }) > 4).length).toBeGreaterThanOrEqual(3)
+      }
+    }
+  })
+
+  test('the days kept before trophies unlock theirs, and a new day keeps the streak going', async ($, on) => {
+    const day = (date: string) => ({ ...emptyDay(date), turns: 2, tools: 20 })
+    const w = world(on, [], { 'day:2026-10-04': day('2026-10-04'), 'day:2026-10-05': day('2026-10-05') })
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    expect(w.toasts.length).toBe(0)
+    await $.turn.start({ text: '開工', turnId: 't1' })
+    await $.turn.complete({ turnId: 't1', reason: 'answer', answer: '好', durationMs: 60_000 } as never)
+    expect(w.toasts.some(t => t.includes('連續開工・銅'))).toBe(true)
+    const run = (args: string) => $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    expect((await run('trophies')).text).toContain('已解鎖 1 / 79')
+    expect((await run('hat crown')).text).toContain('還沒解鎖王冠')
+    const pane = await $.ui.mount({ plugin: 'clawd-sidekick', surface: 'terminal', component: 'Pane', requestId: 'clawd-trophies', props: { title: '成就', isFocused: true, bodyColumns: 100, placement: 'dock' } } as never)
+    expect(await pane.find({ text: /連續開工/ })).toBeDefined()
+    expect(await pane.find({ text: /3 天 \/ 7 天/ })).toBeDefined()
+  })
+
+  test('a hat earned can be worn, swapped and taken off', async ($, on) => {
+    world(on, [], { trophies: { unlocked: { 'streak:silver': 1, 'streak:gold': 2, 'scenes:silver': 3 }, hat: 'auto', pal: 'auto' } })
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    const run = (args: string) => $.command.run({ command: 'clawd', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    expect((await run('hat')).text).toContain('王冠')
+    expect((await run('hat 探險帽')).text).toContain('戴上了探險帽')
+    expect((await run('hat none')).text).toContain('拿下來')
+    expect((await run('pal cat')).text).toContain('還沒解鎖貓咪')
   })
 })
 
