@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.17.1
+
+- The folded terminal band: the CLI banner's whole Clawd, painted cell by cell, beside three lines (what he's doing; the context, the 5-hour window, this reply and git; the next deadline). One row of block glyphs read as a bar.
+- Short on rows, the room names under the terminal house give way first, so the figures and buttons still fit.
+
 ## 0.17.0
 
 - **No more flashing on the Desktop.** The house is drawn as an image, which a new drawing replaces without a blink; it used to be a frame that went blank for a moment each time Clawd moved or his bubble changed.

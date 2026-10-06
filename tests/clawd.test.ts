@@ -867,6 +867,11 @@ describe('the band above the prompt', () => {
     expect(await ui.find({ text: /42%/ })).toBeDefined()
     expect(await ui.find({ text: /31%/ })).toBeDefined()
     expect(await ui.find({ text: /這次回覆/ })).toBeDefined()
+    // The terminal's is the banner's whole Clawd beside three lines, not one row of him.
+    const terminal = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect((await terminal.find({ type: 'Raster', key: 'face' }))?.props.rows).toBe(3)
+    expect(await terminal.find({ text: /42%/ })).toBeDefined()
+    expect(await terminal.find({ text: /沒有截止日/ })).toBeDefined()
     await w.clock.settle()
   })
 

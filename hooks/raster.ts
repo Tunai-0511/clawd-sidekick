@@ -64,13 +64,7 @@ export function houseCells(props: SceneProps, t: number, now: number, columns: n
       const x = left + col
       const upper = x < SW ? ink(row * 2 * SW + x, x) : -1
       const lower = x < SW ? ink((row * 2 + 1) * SW + x, x) : -1
-      let cell: [number, number, number]
-      if (upper < 0 && lower < 0) cell = [SPACE, DEFAULT, DEFAULT]
-      else if (upper === lower) cell = [SPACE, DEFAULT, upper]
-      else if (lower < 0) cell = [BLOCK_TOP, upper, DEFAULT]
-      else if (upper < 0) cell = [BLOCK_BOTTOM, lower, DEFAULT]
-      else cell = [BLOCK_TOP, upper, lower]
-      words.set(cell, (row * columns + col) * 3)
+      words.set(cellOf(upper, lower), (row * columns + col) * 3)
     }
   }
   return base64(new Uint8Array(words.buffer))
@@ -92,6 +86,37 @@ function base64(bytes: Uint8Array): string {
     out += i + 2 < bytes.length ? ALPHABET[c & 63]! : '='
   }
   return out
+}
+
+/**
+ * The folded band's Clawd: the CLI banner's own, nine columns by three rows,
+ * drawn the house's way (two pixels a cell, each cell its own background) so
+ * no line spacing cuts through him and his eyes stay put.
+ */
+const FACE = ['.OOOOOOO.', '.OEOOOEO.', 'OOOOOOOOO', '.OOOOOOO.', '.O.O.O.O.', '.........']
+const FACE_COLORS: Readonly<Record<string, number>> = { O: 0xd97757, E: 0x2a1a15 }
+
+export const FACE_COLUMNS = 9
+export const FACE_ROWS = 3
+
+export function faceCells(): string {
+  const words = new Uint32Array(FACE_COLUMNS * FACE_ROWS * 3)
+  const ink = (x: number, y: number): number => FACE_COLORS[FACE[y]?.[x] ?? '.'] ?? -1
+  for (let row = 0; row < FACE_ROWS; row++) {
+    for (let col = 0; col < FACE_COLUMNS; col++) {
+      words.set(cellOf(ink(col, row * 2), ink(col, row * 2 + 1)), (row * FACE_COLUMNS + col) * 3)
+    }
+  }
+  return base64(new Uint8Array(words.buffer))
+}
+
+/** A cell of two pixels, -1 for none: a space on one colour, else a half block on the other. */
+function cellOf(upper: number, lower: number): [number, number, number] {
+  if (upper < 0 && lower < 0) return [SPACE, DEFAULT, DEFAULT]
+  if (upper === lower) return [SPACE, DEFAULT, upper]
+  if (lower < 0) return [BLOCK_TOP, upper, DEFAULT]
+  if (upper < 0) return [BLOCK_BOTTOM, lower, DEFAULT]
+  return [BLOCK_TOP, upper, lower]
 }
 
 /** Terminal cells a string takes: CJK two, the rest one. */

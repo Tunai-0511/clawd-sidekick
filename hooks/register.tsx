@@ -15,7 +15,7 @@ import { countdown, formatDue, newId, parseDeadline, parseOffset, urgency, URGEN
 import { langOf, say, type Lang } from './i18n'
 import { actorTip, actorX, eggOf, layoutFor, ROOMS, SH, SPOT_X, STEP, SW, type Spot } from './scene'
 import { actorHoverSvg, doneClawdSvg, miniClawdSvg, roomHoverSvg, sceneSvg, squashClawdSvg } from './scene-svg'
-import { cameraOf, HOUSE_ROWS, houseCells, signsLine } from './raster'
+import { cameraOf, FACE_COLUMNS, FACE_ROWS, faceCells, HOUSE_ROWS, houseCells, signsLine } from './raster'
 import { isSwitched, roomSpans } from './light'
 import { H, W } from './sprite'
 import { THEME_ORDER, THEMES } from './themes'
@@ -1174,26 +1174,45 @@ export const register: Register = (on, options) => {
     const langButton = <Button key="lang" label={w.otherLanguage} onPress={() => setLang($, talk === 'zh' ? 'en' : 'zh')} />
     if (isCollapsed || isCramped) {
       const now_ = doing.label && doing.label !== w.sleepy ? doing.label : w.doings[main?.doing ?? 'idle']
-      let face: RenderElement
-      if (e.surface === 'terminal') {
-        face = <Text color={ORANGE}>▐▛███▜▌</Text>
-      } else {
-        const { Svg } = $.ui.resolve(e)
-        face = <Svg source={miniClawdSvg(main?.doing ?? 'idle')} alt="Clawd" width={36} height={24} />
-      }
+      const label = <Text color={ORANGE} bold wrap="truncate-end">{`${names.main ?? 'Clawd'} · ${now_}`}</Text>
+      const figures = [
+        usage.contextPercent === null ? null : stat('ctx', `${Math.round(usage.contextPercent)}%`, level(usage.contextPercent)),
+        limit('5h', usage.fiveHour, usage.fiveHourResetsAt),
+        hasReply ? stat(isWorking ? w.turn : w.lastTurn, clockText) : null,
+        gitText,
+      ]
+      const expand = isCollapsed ? <Button key="expand" label={w.expand} variant="primary" onPress={() => setCollapsed($, false)} /> : null
       // Folded, the band keeps what matters at a glance: what he's doing, the context and the plan, this reply, git, the next deadline.
+      if (e.surface === 'terminal') {
+        // The terminal's Clawd is the CLI banner's own, three rows of him painted cell by cell: one row of glyphs reads as a bar.
+        const { Raster } = $.ui.resolve(e)
+        return (
+          <Box flexDirection="row" columnGap={2}>
+            <Raster key="face" columns={FACE_COLUMNS} rows={FACE_ROWS} cells={faceCells()} />
+            <Box flexDirection="column" flexGrow={1}>
+              {label}
+              <Box flexDirection="row" columnGap={2}>
+                {figures}
+              </Box>
+              <Box flexDirection="row" columnGap={1}>
+                {deadlineText ?? <Text dimColor>{w.noDeadline}</Text>}
+                <Box flexGrow={1} />
+                {expand}
+              </Box>
+            </Box>
+          </Box>
+        )
+      }
+      const { Svg } = $.ui.resolve(e)
       return (
         <Box flexDirection="row" columnGap={2} alignItems="center" flexWrap="wrap">
-          {face}
-          <Text color={ORANGE} bold wrap="truncate-end">{`${names.main ?? 'Clawd'} · ${now_}`}</Text>
-          {usage.contextPercent === null ? null : stat('ctx', `${Math.round(usage.contextPercent)}%`, level(usage.contextPercent))}
-          {limit('5h', usage.fiveHour, usage.fiveHourResetsAt)}
-          {hasReply ? stat(isWorking ? w.turn : w.lastTurn, clockText) : null}
-          {gitText}
+          <Svg source={miniClawdSvg(main?.doing ?? 'idle')} alt="Clawd" width={36} height={24} />
+          {label}
+          {figures}
           {deadlineText}
           <Box flexGrow={1} />
-          {isCollapsed ? <Button key="expand" label={w.expand} variant="primary" onPress={() => setCollapsed($, false)} /> : null}
-          {e.surface === 'terminal' ? null : langButton}
+          {expand}
+          {langButton}
         </Box>
       )
     }
@@ -1236,9 +1255,12 @@ export const register: Register = (on, options) => {
       house = (
         <Box flexDirection="column">
           <Raster key="house" columns={columns} rows={HOUSE_ROWS} cells={houseCells(scene, rasterFrame, now, columns)} />
-          <Text dimColor wrap="truncate">
-            {signsLine(cameraOf(scene, columns, now), columns, talk, theme)}
-          </Text>
+          {/* Short on rows, the room names go first, so the figures and the buttons still fit. */}
+          {e.props.maxRows - HOUSE_ROWS < 5 ? null : (
+            <Text dimColor wrap="truncate">
+              {signsLine(cameraOf(scene, columns, now), columns, talk, theme)}
+            </Text>
+          )}
         </Box>
       )
     } else {
