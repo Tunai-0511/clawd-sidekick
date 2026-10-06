@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.1
+
+- The desktop's spinner row said the turn's state twice ("Working… 45s · thinking · Thinking"): the desktop names it after the row itself, so Clawd's line there is now the word and the clock.
+
 ## 0.13.0
 
 - **No tokens at all.** Removed the to-dos Claude hands you: the notes a small model read off replies, `/todo`, the `autoTodo` and `todoModel` settings, and the "Your half" trophies (75 trophies now). It was the only thing that called a model; Clawd Sidekick now calls none.

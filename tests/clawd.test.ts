@@ -696,6 +696,8 @@ describe('the band above the prompt', () => {
     const desktop = await $.ui.mount({ plugin: 'clawd-sidekick', surface: 'desktop', component: 'Spinner', props })
     expect(await desktop.find({ type: 'Svg' })).toBeDefined()
     expect(await desktop.find({ text: /Thinking…/, in: 'spinner' })).toBeDefined()
+    // The desktop names the turn's state itself, so the line does not say it twice.
+    expect(await desktop.find({ text: /thinking/, in: 'spinner' })).toBeUndefined()
   })
 
   test('the season and the holiday can be set by hand and handed back to the date', async ($, on) => {

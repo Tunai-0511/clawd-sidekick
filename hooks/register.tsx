@@ -868,7 +868,8 @@ export const register: Register = (on, options) => {
     const props = {
       word: e.props.message ?? e.props.word,
       suffix: e.props.suffix,
-      mode: MODE_WORDS[mode],
+      // The terminal says what the turn is doing; the desktop says it itself.
+      mode: e.surface === 'terminal' ? MODE_WORDS[mode] : '',
       startedAt: usage.turnStartedAt > 0 ? usage.turnStartedAt : Date.now(),
       doing,
       isTerminal: e.surface === 'terminal',

@@ -39,12 +39,15 @@ const SpinnerClient: ClientModule<Props, Live> = (props, surface) => {
   const { Box, Text } = surface.elements
   const t = surface.state?.t ?? 0
   const dots = props.doing === 'think' ? '·'.repeat(1 + (t % 3)) : ''
+  // The desktop says what the turn is doing after the row itself ("Thinking"),
+  // and its Clawd thinks in dots of his own: there the line is the word and the clock.
+  const detail = props.isTerminal ? `  ${elapsed(props.startedAt)} · ${props.mode} ${dots}` : `  ${elapsed(props.startedAt)}${props.mode === '' ? '' : ` · ${props.mode}`}`
   const line = (
     <Text>
       <Text color={ORANGE} bold>
         {`${props.word}${props.suffix}`}
       </Text>
-      <Text dimColor>{`  ${elapsed(props.startedAt)} · ${props.mode} ${dots}`}</Text>
+      <Text dimColor>{detail}</Text>
     </Text>
   )
   if (!props.isTerminal) return line
