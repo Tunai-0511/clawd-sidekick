@@ -77,6 +77,13 @@ const compactingAtom = atom({ plugin: 'clawd-sidekick', key: 'compacting' } as c
 const seasonPickAtom = atom({ plugin: 'clawd-sidekick', key: 'seasonPick' } as const, 'auto')
 const holidayPickAtom = atom({ plugin: 'clawd-sidekick', key: 'holidayPick' } as const, 'auto')
 
+/**
+ * What features since removed kept on this machine: the sound and band
+ * setting, the to-do list, the weather and the place it was for. Nothing
+ * reads them any more, so they are deleted when a session starts.
+ */
+const RETIRED_KEYS = ['band', 'todos', 'weather', 'weatherNoticed'] as const
+
 const home = (id: string, cap: string | null, x: number, doing: Doing): SceneActor => ({ id, cap, fromX: x, toX: x, departAt: 0, doing, label: '' })
 
 const HOUSE: SceneActor[] = [
@@ -1019,10 +1026,17 @@ export const register: Register = (on, options) => {
           {usage.fiveHour === null ? null : stat('5h', `${Math.round(usage.fiveHour)}%`, level(usage.fiveHour))}
           {usage.sevenDay === null ? null : stat('7d', `${Math.round(usage.sevenDay)}%`, level(usage.sevenDay))}
           {usage.usd === null ? null : stat('$', usage.usd.toFixed(2))}
-          {stat(isWorking ? w.turn : w.lastTurn, clockText)}
-          {stat(w.tools, String(usage.tools))}
-          {stat(w.edited, w.files(usage.edits))}
-          {stat(w.ran, w.commands(usage.runs))}
+          {/* One group, so it reads as one thing: how long Claude has been on your latest message (or took on the last), and what it did there. */}
+          <Text>
+            <Text dimColor>{`${isWorking ? w.turn : w.lastTurn} `}</Text>
+            {clockText}
+            <Text dimColor>{` · ${w.tools} `}</Text>
+            {String(usage.tools)}
+            <Text dimColor>{` · ${w.edited} `}</Text>
+            {w.files(usage.edits)}
+            <Text dimColor>{` · ${w.ran} `}</Text>
+            {w.commands(usage.runs)}
+          </Text>
         </Box>
         <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
           {nearest === undefined ? <Text dimColor>{w.noDeadline}</Text> : (
@@ -1432,6 +1446,13 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     const started = await next(e)
+    for (const key of RETIRED_KEYS) {
+      try {
+        await $.store.delete(key)
+      } catch {
+        // Gone already, or the store is busy: the next session tries again.
+      }
+    }
     await load($)
     const root = await $.session.root()
     await update($, projectAtom, () => baseName(root))

@@ -106,13 +106,13 @@ With reduced motion turned on in your system settings, the Desktop scene holds s
 
 <img src="docs/compacting.gif" alt="While the conversation is compacted, Clawd stomps a pile of pages into a bundle" width="310" align="right">
 
-**A Clawd spinner.** The `Thinking…` line becomes a small Clawd who thinks in dots, then sits down at a laptop and types away while Claude works, beside a clock that counts every second. While the conversation is compacted he stomps a pile of pages down into a neat bundle. In the Desktop app, a tool's row in the conversation shows him at the laptop too while the tool runs. Between turns he stands by on the hint line under the prompt: waving when it's your turn, asleep late at night, with how long the last turn took and today's total. These two lines stay in English in either language, beside Claude Code's own words.
+**A Clawd spinner.** The `Thinking…` line becomes a small Clawd who thinks in dots, then sits down at a laptop and types away while Claude works, beside a clock that counts every second. While the conversation is compacted he stomps a pile of pages down into a neat bundle. In the Desktop app, a tool's row in the conversation shows him at the laptop too while the tool runs. Between turns he stands by on the hint line under the prompt: waving when it's your turn, asleep late at night, with how long the last reply took and today's total. These two lines stay in English in either language, beside Claude Code's own words.
 
 **Clawd's day.** `/clawd recap` (or **Today** in the `/clawd` pane) shows a card of the day so far: how long Clawd worked alongside Claude, turns, tool calls, files edited, commands, tests passed, commits, pushes and tidy-ups, where the day went room by room, the week, and your streak of days in a row. It counts every session and project on the machine, and it's made to be screenshotted and shared.
 
 ![Clawd's day: 3 h 12 min with Claude, 14 turns, 148 tool calls, 5 of 6 tests passed, 3 commits, the time by room, the week, and a 4-day streak](./docs/recap-en.png)
 
-**Live figures** under the house: model, context fill, 5-hour and 7-day plan usage, session cost, the turn timer, and this turn's tool calls, edits and commands. Each turns yellow past 50% and red past 80%.
+**Live figures** under the house: model, context fill, 5-hour and 7-day plan usage, session cost, and your latest message: how long Claude has been on it (or took on the last one), and the tool calls, edits and commands it made there. Each turns yellow past 50% and red past 80%.
 
 **Deadline radar.** `/deadline add 12/24 Launch` puts a countdown on the band and the wall calendar, and pins a note on the board, coloured by how near it is. With under 3 days left Clawd sweats; under 24 hours the calendar flashes red and he panics.
 

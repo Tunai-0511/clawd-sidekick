@@ -695,6 +695,8 @@ describe('the band above the prompt', () => {
     await $.turn.start({ text: '幫我修 bug', turnId: 't0' })
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
     expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toContain('在打排球')
+    // The reply's figures read as one group.
+    expect(await ui.find({ text: /這次回覆 0:00 · 工具 0 · 改 0 檔 · 跑 0 指令/ })).toBeDefined()
   })
 
   test('a subagent borrows a player from the game room and gives him back', async ($, on) => {
@@ -889,7 +891,7 @@ describe('the band above the prompt', () => {
     await $.turn.complete({ turnId: 't5', reason: 'answer', answer: '好了', durationMs: 64_000 } as never)
     const after = await hint('desktop', false)
     expect(await after.find({ text: /Your turn/ })).toBeDefined()
-    expect(await after.find({ text: /last turn 1:04/ })).toBeDefined()
+    expect(await after.find({ text: /last reply 1:04/ })).toBeDefined()
   })
 
   test('the spinner is a thinking Clawd with a clock that keeps counting', async ($, on) => {
@@ -906,6 +908,14 @@ describe('the band above the prompt', () => {
     expect(await desktop.find({ text: /Thinking…/, in: 'spinner' })).toBeDefined()
     // The desktop names the turn's state itself, so the line does not say it twice.
     expect(await desktop.find({ text: /thinking/, in: 'spinner' })).toBeUndefined()
+  })
+
+  test('what removed features kept on this machine is deleted at the start', async ($, on) => {
+    const w = world(on, [], { band: 'off', todos: [{ text: 'Launch' }], weather: { place: { name: 'Springfield' } }, weatherNoticed: true, theme: 'beach' })
+    await $.session.start({ cwd: '/Users/me/projects/my-app', surface: 'terminal', isInteractive: true })
+    await w.clock.settle()
+    for (const key of ['band', 'todos', 'weather', 'weatherNoticed']) expect(w.store.has(key)).toBe(false)
+    expect(w.store.get('theme')).toBe('beach')
   })
 
   test('while the talk is compacted, the spinner Clawd stomps a pile of pages flat', async ($, on) => {

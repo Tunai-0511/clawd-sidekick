@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.16.1
+
+- The band's turn figures read as one group and say what they are: "this reply 0:17 · tools 2 · edited 0 files · ran 2 commands" while Claude works on your latest message, "last reply …" after. Chinese: 這次回覆／上次回覆 instead of 回合／上回合.
+- What features since removed left on your machine is deleted when a session starts: the old sound and band setting, the to-do list, and the weather with the place it was for.
+
 ## 0.16.0
 
 - **Compacting, Clawd squashes the talk down.** While the conversation is compacted, the spinner's Clawd stands on a messy pile of pages, jumps and stomps it flat, then again into a neat bundle tied with a red strap, cheers while it sparkles, and hops onto the next pile. In the terminal he stands on a pile that sinks a little every beat.

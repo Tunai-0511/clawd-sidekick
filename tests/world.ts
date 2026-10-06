@@ -1,4 +1,4 @@
-// What sits beneath the plugin in a test: a clock, a store, the host calls
+// What sits beneath the plugin in a test: a clock, a store it can look into, the host calls
 // it makes, and a model that answers from a list.
 
 import type { On, RenderPropsOf } from 'claude-code'
@@ -8,20 +8,33 @@ export const NOW = Date.UTC(2026, 9, 6, 8, 0)
 
 export type World = {
   clock: MockClock
-  played: number
   toasts: string[]
   opened: string[]
   prompts: string[]
   replies: string[]
   /** The project folder session.root answers; a test changes it to open another project. */
   root: string
+  /** What the plugin keeps across sessions, as it keeps it. */
+  store: Map<string, unknown>
 }
 
 export type Extra = { zone?: string; now?: number; git?: { status: string; lastCommit: number } }
 
 export function world(on: On, replies: string[] = [], stored: Readonly<Record<string, unknown>> = {}, system = 'zh-Hant-TW', extra: Extra = {}): World {
-  const w: World = { clock: mock.clock(on, { now: extra.now ?? NOW }), played: 0, toasts: [], opened: [], prompts: [], replies, root: '/Users/me/projects/my-app' }
-  mock.store(on, stored)
+  const w: World = { clock: mock.clock(on, { now: extra.now ?? NOW }), toasts: [], opened: [], prompts: [], replies, root: '/Users/me/projects/my-app', store: new Map() }
+  // A store in memory the test can look into, each value copied the way a file would.
+  const copy = (value: unknown): unknown => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)))
+  for (const [key, value] of Object.entries(stored)) w.store.set(key, copy(value))
+  on('store.get', (_$, e) => ({ value: copy(w.store.get(e.key)) }))
+  on('store.set', (_$, e) => {
+    w.store.set(e.key, copy(e.value))
+    return { value: undefined }
+  })
+  on('store.delete', (_$, e) => {
+    w.store.delete(e.key)
+    return { value: undefined }
+  })
+  on('store.keys', () => ({ value: [...w.store.keys()] }))
   mock.env(on, { HOME: '/tmp/clawd-test' })
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.root', () => ({ value: w.root }))
@@ -33,10 +46,6 @@ export function world(on: On, replies: string[] = [], stored: Readonly<Record<st
     return { value: { exitCode: stdout === '' ? 1 : 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
-  on('audio.play', () => {
-    w.played += 1
-    return { value: undefined }
-  })
   on('ui.toast', (_$, e) => {
     w.toasts.push(e.text)
     return { value: undefined }
